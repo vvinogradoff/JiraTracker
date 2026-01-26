@@ -1,0 +1,136 @@
+<Window x:Class="UpworkJiraTracker.View.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:UpworkJiraTracker.XAML"
+        xmlns:converters="clr-namespace:UpworkJiraTracker.XAML.Converter"
+        mc:Ignorable="d"
+        Title="UpworkJiraTracker"
+        Height="48"
+        Width="180"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        MouseDown="Window_MouseDown"
+        PreviewMouseDown="Window_PreviewMouseDown"
+        Deactivated="Window_Deactivated">
+
+	<Window.Resources>
+		<converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+		<converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter"/>
+
+		<!-- Play/Stop button style with subtle hover -->
+		<Style x:Key="PlayStopButtonStyle" TargetType="Button">
+			<Setter Property="Background" Value="Transparent"/>
+			<Setter Property="BorderThickness" Value="0"/>
+			<Setter Property="Cursor" Value="Hand"/>
+			<Setter Property="Template">
+				<Setter.Value>
+					<ControlTemplate TargetType="Button">
+						<Border Background="Transparent">
+							<ContentPresenter x:Name="content" Opacity="1"/>
+						</Border>
+						<ControlTemplate.Triggers>
+							<Trigger Property="IsMouseOver" Value="True">
+								<Setter TargetName="content" Property="Opacity" Value="0.7"/>
+							</Trigger>
+						</ControlTemplate.Triggers>
+					</ControlTemplate>
+				</Setter.Value>
+			</Setter>
+		</Style>
+	</Window.Resources>
+
+	<Grid>
+		<Border x:Name="MainBorder"
+                Background="{Binding BackgroundBrush}"
+                CornerRadius="4"
+                Padding="8,4">
+			<Grid>
+				<Grid.ColumnDefinitions>
+					<ColumnDefinition Width="Auto"/>
+					<ColumnDefinition Width="*"/>
+				</Grid.ColumnDefinitions>
+				<Grid.RowDefinitions>
+					<RowDefinition Height="24"/>
+					<RowDefinition Height="*"/>
+				</Grid.RowDefinitions>
+
+				<!-- Play/Pause Button -->
+				<Button x:Name="PlayPauseButton"
+                        Grid.Column="0" Grid.Row="0"
+                        Width="24"
+                        Height="24"
+                        Margin="0,0,8,0"
+						VerticalAlignment="Top"
+                        Style="{StaticResource PlayStopButtonStyle}"
+                        Command="{Binding PlayPauseCommand}">
+					<Path x:Name="PlayPauseIcon"
+                          Data="{Binding PlayPauseIconData}"
+                          Fill="{Binding IconFillBrush}"
+                          Stroke="{Binding IconStrokeBrush}"
+                          StrokeThickness="{Binding IconStrokeThickness}"
+                          Stretch="Uniform"
+                          Width="20"
+                          Height="20"/>
+				</Button>
+				<TextBlock Grid.Row="1" Grid.Column="0"
+						   Text="{Binding TimerTime}"
+						   VerticalAlignment="Center"
+                           Style="{StaticResource StyleTimerText}"
+                           Foreground="{Binding DataContext.ForegroundBrush, RelativeSource={RelativeSource AncestorType=Window}}"/>
+
+				<!-- Upper text (arbitrary name) - Click for autocomplete -->
+				<Border Grid.Row="0" Grid.Column="1"
+                            Background="Transparent"
+                            Cursor="Hand"
+                            MouseDown="UpperArea_MouseDown"
+                            MouseMove="UpperArea_MouseMove"
+                            MouseUp="UpperArea_MouseUp">
+					<Grid>
+						<TextBlock x:Name="DisplayTextBlock"
+                                       Text="{Binding DisplayText}"
+                                       Style="{StaticResource StyleMainDisplayText}"
+                                       Foreground="{Binding ForegroundBrush}"
+                                       VerticalAlignment="Center"
+                                       Visibility="{Binding IsAutocompleteActive, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+
+						<local:AutocompleteTextBox x:Name="JiraAutocomplete"
+                                                       Visibility="{Binding IsAutocompleteActive, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                       VerticalAlignment="Center"/>
+					</Grid>
+				</Border>
+
+				<!-- Lower times - Click for settings -->
+				<Border Grid.Row="1" Grid.Column="1"
+                            Background="Transparent"
+                            Cursor="Hand"
+                            MouseDown="LowerArea_MouseDown"
+                            MouseMove="LowerArea_MouseMove"
+                            MouseUp="LowerArea_MouseUp">
+					<ItemsControl ItemsSource="{Binding TimeDisplays}"
+                                      IsHitTestVisible="False">
+						<ItemsControl.ItemsPanel>
+							<ItemsPanelTemplate>
+								<StackPanel Orientation="Horizontal"
+                                                VerticalAlignment="Center"/>
+							</ItemsPanelTemplate>
+						</ItemsControl.ItemsPanel>
+						<ItemsControl.ItemTemplate>
+							<DataTemplate>
+								<TextBlock Text="{Binding Text}"
+                                           Style="{StaticResource StyleTimezoneText}"
+                                           Foreground="{Binding DataContext.ForegroundBrush, RelativeSource={RelativeSource AncestorType=Window}}"/>
+							</DataTemplate>
+						</ItemsControl.ItemTemplate>
+					</ItemsControl>
+				</Border>
+
+			</Grid>
+		</Border>
+	</Grid>
+</Window>

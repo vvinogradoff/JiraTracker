@@ -1,0 +1,128 @@
+<UserControl x:Class="UpworkJiraTracker.XAML.AutocompleteTextBox"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:local="clr-namespace:UpworkJiraTracker.XAML"
+             xmlns:converters="clr-namespace:UpworkJiraTracker.XAML.Converter"
+             mc:Ignorable="d"
+             d:DesignHeight="30" d:DesignWidth="200">
+	<UserControl.Resources>
+		<converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+		<converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter"/>
+		<converters:StatusBackgroundConverter x:Key="StatusBackgroundConverter"/>
+	</UserControl.Resources>
+	<Grid>
+		<TextBox x:Name="InputTextBox"
+                 Style="{StaticResource FlatTextBoxStyle}"
+                 TextChanged="InputTextBox_TextChanged"
+                 PreviewKeyDown="InputTextBox_PreviewKeyDown"
+                 LostFocus="InputTextBox_LostFocus"/>
+
+		<Popup x:Name="SuggestionsPopup"
+               PlacementTarget="{Binding ElementName=InputTextBox}"
+			   VerticalOffset="-4"
+               Placement="Top"
+               StaysOpen="True"
+               AllowsTransparency="True"
+               Focusable="False"
+               PopupAnimation="Fade">
+			<Border Background="White"
+                    BorderBrush="#CCCCCC"
+                    BorderThickness="1"
+                    MaxHeight="200"
+                    Width="{DynamicResource PopupWidth}"
+                    MinWidth="{Binding ElementName=InputTextBox, Path=ActualWidth}">
+				<Border.Effect>
+					<DropShadowEffect BlurRadius="10"
+                                    ShadowDepth="2"
+                                    Opacity="0.3"
+                                    Color="Black"/>
+				</Border.Effect>
+
+				<Grid>
+					<!-- Loading indicator -->
+					<Border x:Name="LoadingBorder"
+                            Background="White"
+                            Padding="16"
+                            Visibility="Collapsed">
+						<StackPanel Orientation="Horizontal"
+                                   HorizontalAlignment="Center">
+							<TextBlock Text="⌛"
+                                      Style="{StaticResource StylePopupLoadingIcon}"/>
+							<TextBlock Text="Loading..."
+                                      Style="{StaticResource StylePopupLoadingText}"/>
+						</StackPanel>
+					</Border>
+
+					<!-- Suggestions list -->
+					<ListBox x:Name="SuggestionsListBox"
+                             BorderThickness="0"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto"
+							 ScrollViewer.CanContentScroll="True"
+                             VirtualizingPanel.ScrollUnit="Pixel"
+                             SelectionChanged="SuggestionsListBox_SelectionChanged">
+						<ListBox.ItemContainerStyle>
+							<Style TargetType="ListBoxItem">
+								<Setter Property="Padding" Value="8,6"/>
+								<Setter Property="Cursor" Value="Hand"/>
+								<Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+								<Setter Property="Background" Value="{Binding Status, Converter={StaticResource StatusBackgroundConverter}}"/>
+								<Style.Triggers>
+									<Trigger Property="IsMouseOver" Value="True">
+										<Setter Property="Background" Value="#F0F0F0"/>
+									</Trigger>
+									<Trigger Property="IsSelected" Value="True">
+										<Setter Property="Background" Value="#E0E0E0"/>
+									</Trigger>
+									<!-- Section header style -->
+									<DataTrigger Binding="{Binding IsSectionHeader}" Value="True">
+										<Setter Property="IsEnabled" Value="False"/>
+										<Setter Property="Focusable" Value="False"/>
+										<Setter Property="IsHitTestVisible" Value="False"/>
+										<Setter Property="Background" Value="#F5F5F5"/>
+										<Setter Property="Padding" Value="8,4"/>
+										<Setter Property="Cursor" Value="Arrow"/>
+									</DataTrigger>
+								</Style.Triggers>
+							</Style>
+						</ListBox.ItemContainerStyle>
+						<ListBox.ItemTemplate>
+							<DataTemplate>
+								<Grid HorizontalAlignment="Stretch">
+									<!-- Section header -->
+									<TextBlock Text="{Binding Key}"
+                                          Style="{StaticResource StylePopupSectionHeader}"
+                                          Visibility="{Binding IsSectionHeader, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+									<!-- Regular issue item -->
+									<Grid Visibility="{Binding IsSectionHeader, Converter={StaticResource InverseBoolToVisibilityConverter}}"
+										  HorizontalAlignment="Stretch">
+										<Grid.ColumnDefinitions>
+											<ColumnDefinition Width="Auto"/>
+											<ColumnDefinition Width="Auto"/>
+											<ColumnDefinition Width="*"/>
+										</Grid.ColumnDefinitions>
+										<Grid.RowDefinitions>
+											<RowDefinition Height="Auto"/>
+											<RowDefinition Height="Auto"/>
+										</Grid.RowDefinitions>
+										<TextBlock Text="{Binding Key}" Grid.Row="0" Grid.Column="0"
+                                              Style="{StaticResource StylePopupIssueKey}"/>
+										<TextBlock Text="{Binding Assignee}" Grid.Row="0" Grid.Column="1"
+												   Style="{StaticResource StylePopupAssignee}"/>
+										<TextBlock Text="{Binding Status}" Grid.Row="0" Grid.Column="2"
+												   Style="{StaticResource StylePopupStatus}"/>
+										<TextBlock Text="{Binding Summary}" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"
+                                              Style="{StaticResource StylePopupSummary}"/>
+									</Grid>
+								</Grid>
+							</DataTemplate>
+						</ListBox.ItemTemplate>
+					</ListBox>
+				</Grid>
+			</Border>
+		</Popup>
+	</Grid>
+</UserControl>
