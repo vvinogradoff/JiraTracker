@@ -43,7 +43,7 @@
 					<RowDefinition Height="*"/>
 				</Grid.RowDefinitions>
 
-				<!-- Title bar with close button -->
+				<!-- Title bar with minimize and close buttons -->
 				<Border Grid.Row="0"
                    Background="#F5F5F5"
                    BorderBrush="#CCCCCC"
@@ -54,11 +54,18 @@
 						<TextBlock Text="Settings"
                               Style="{StaticResource StyleSettingsTitle}"/>
 
-						<Button x:Name="CloseButton"
-                           Content="✕"
-                           HorizontalAlignment="Right"
-                           Style="{StaticResource StyleCloseButton}"
-                           Command="{Binding CloseCommand}"/>
+						<StackPanel Orientation="Horizontal"
+                               HorizontalAlignment="Right">
+							<Button x:Name="MinimizeButton"
+                               Content="−"
+                               Margin="0,0,8,0"
+                               Style="{StaticResource StyleCloseButton}"
+                               Click="MinimizeButton_Click"/>
+							<Button x:Name="CloseButton"
+                               Content="✕"
+                               Style="{StaticResource StyleCloseButton}"
+                               Command="{Binding CloseCommand}"/>
+						</StackPanel>
 					</Grid>
 				</Border>
 
@@ -154,7 +161,7 @@
 								Style="{StaticResource SecondaryButtonStyle}"/>
 					</Grid>
 
-					<!-- Jira Integration -->
+					<!-- Integrations -->
 					<Grid Margin="0,12,0,0">
 						<Grid.ColumnDefinitions>
 							<ColumnDefinition Width="*"/>
@@ -223,12 +230,47 @@
 						<TextBlock Text="Leave empty to disable logging"
                               Style="{StaticResource StyleSettingsHint}"/>
 					</StackPanel>
+
+					<!-- Topmost Enforcement Interval -->
+					<Grid Margin="0,12,0,0">
+						<Grid.ColumnDefinitions>
+							<ColumnDefinition Width="*"/>
+							<ColumnDefinition Width="*"/>
+							<ColumnDefinition Width="*"/>
+							<ColumnDefinition Width="*"/>
+						</Grid.ColumnDefinitions>
+						<Grid.RowDefinitions>
+							<RowDefinition Height="*"/>
+							<RowDefinition Height="*"/>
+							<RowDefinition Height="*"/>
+						</Grid.RowDefinitions>
+						<TextBlock Grid.Row="0" Grid.Column="0"  Grid.ColumnSpan="2"
+								   Text="Topmost Interval, sec:"
+								   VerticalAlignment="Center"
+								   Style="{StaticResource StyleSettingsLabel}"/>
+						<TextBox Grid.Row="0" Grid.Column="2" 
+								 Text="{Binding TopmostEnforcementIntervalSeconds, UpdateSourceTrigger=PropertyChanged}"
+								 HorizontalContentAlignment="Center"
+								 Style="{StaticResource StyleSettingsInput}"/>
+						<TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="4"
+								   Text="How often to enforce window stays on top (1-60 seconds)"
+								   Style="{StaticResource StyleSettingsHint}"/>
+					</Grid>
+
+					<StackPanel Margin="0,12,0,0">
+					</StackPanel>
 				</StackPanel>
 			</Grid>
 		</Border>
 
 		<!-- Confirmation Overlay -->
 		<local:ConfirmationOverlay x:Name="ConfirmationOverlay"
-                                   Visibility="Collapsed"/>
+                                   Visibility="Collapsed"
+								   Confirmed="ConfirmationOverlay_Confirmed"
+								   Cancelled="ConfirmationOverlay_Cancelled"/>
+		<local:JiraCredentialsOverlay x:Name="JiraCredentialsOverlay"
+									  Visibility="Collapsed"
+									  CredentialsSubmitted="JiraCredentialsOverlay_CredentialsSubmitted"
+									  Cancelled="JiraCredentialsOverlay_Cancelled"/>	
 	</Grid>
 </Window>

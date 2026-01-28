@@ -43,7 +43,20 @@ public class JiraIssuesService
     {
         if (!_authService.IsAuthenticated)
         {
-            SuggestionsUpdated?.Invoke(this, new List<JiraIssue>());
+            // Show "Not connected to Jira" placeholder
+            var placeholder = new List<JiraIssue>
+            {
+                new JiraIssue
+                {
+                    Key = "",
+                    Summary = "Not connected to Jira",
+                    IsSectionHeader = true, // Use header styling (gray/inactive)
+                    Status = "",
+                    Assignee = "",
+                    Reporter = ""
+                }
+            };
+            SuggestionsUpdated?.Invoke(this, placeholder);
             return;
         }
 
@@ -124,14 +137,44 @@ public class JiraIssuesService
 
             // Update cache and fire event
             _cachedDefaultSuggestions = suggestions;
+
+            // If no suggestions at all, show "Nothing found" placeholder
+            if (suggestions.Count == 0)
+            {
+                suggestions = new List<JiraIssue>
+                {
+                    new JiraIssue
+                    {
+                        Key = "",
+                        Summary = "Nothing found",
+                        IsSectionHeader = true,
+                        Status = "",
+                        Assignee = "",
+                        Reporter = ""
+                    }
+                };
+            }
+
             SuggestionsUpdated?.Invoke(this, suggestions);
         }
         catch
         {
-            // If we have cache, keep showing it; otherwise show empty
+            // If we have cache, keep showing it; otherwise show "Nothing found"
             if (_cachedDefaultSuggestions == null || _cachedDefaultSuggestions.Count == 0)
             {
-                SuggestionsUpdated?.Invoke(this, new List<JiraIssue>());
+                var placeholder = new List<JiraIssue>
+                {
+                    new JiraIssue
+                    {
+                        Key = "",
+                        Summary = "Nothing found",
+                        IsSectionHeader = true,
+                        Status = "",
+                        Assignee = "",
+                        Reporter = ""
+                    }
+                };
+                SuggestionsUpdated?.Invoke(this, placeholder);
             }
         }
         finally
@@ -162,6 +205,24 @@ public class JiraIssuesService
         }
 
         var results = _cacheService.Search(text);
+
+        // If no results found, show "Nothing found" placeholder
+        if (results.Count == 0)
+        {
+            results = new List<JiraIssue>
+            {
+                new JiraIssue
+                {
+                    Key = "",
+                    Summary = "Nothing found",
+                    IsSectionHeader = true,
+                    Status = "",
+                    Assignee = "",
+                    Reporter = ""
+                }
+            };
+        }
+
         SuggestionsUpdated?.Invoke(this, results);
     }
 
@@ -179,7 +240,20 @@ public class JiraIssuesService
 
         if (!_authService.IsAuthenticated)
         {
-            SuggestionsUpdated?.Invoke(this, new List<JiraIssue>());
+            // Show "Not connected to Jira" placeholder
+            var placeholder = new List<JiraIssue>
+            {
+                new JiraIssue
+                {
+                    Key = "",
+                    Summary = "Not connected to Jira",
+                    IsSectionHeader = true,
+                    Status = "",
+                    Assignee = "",
+                    Reporter = ""
+                }
+            };
+            SuggestionsUpdated?.Invoke(this, placeholder);
             return;
         }
 
@@ -192,11 +266,41 @@ public class JiraIssuesService
             // Add results to cache for future searches
             _cacheService.AddToCache(issues);
 
+            // If no results found, show "Nothing found" placeholder
+            if (issues.Count == 0)
+            {
+                issues = new List<JiraIssue>
+                {
+                    new JiraIssue
+                    {
+                        Key = "",
+                        Summary = "Nothing found",
+                        IsSectionHeader = true,
+                        Status = "",
+                        Assignee = "",
+                        Reporter = ""
+                    }
+                };
+            }
+
             SuggestionsUpdated?.Invoke(this, issues);
         }
         catch
         {
-            SuggestionsUpdated?.Invoke(this, new List<JiraIssue>());
+            // Show "Nothing found" on error
+            var placeholder = new List<JiraIssue>
+            {
+                new JiraIssue
+                {
+                    Key = "",
+                    Summary = "Nothing found",
+                    IsSectionHeader = true,
+                    Status = "",
+                    Assignee = "",
+                    Reporter = ""
+                }
+            };
+            SuggestionsUpdated?.Invoke(this, placeholder);
         }
         finally
         {

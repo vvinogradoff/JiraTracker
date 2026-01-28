@@ -68,7 +68,9 @@
                         Margin="0,0,8,0"
 						VerticalAlignment="Top"
                         Style="{StaticResource PlayStopButtonStyle}"
-                        Command="{Binding PlayPauseCommand}">
+                        Command="{Binding PlayPauseCommand}"
+                        IsEnabled="{Binding IsUpworkReady}"
+                        ToolTip="{Binding PlayPauseTooltip}">
 					<Path x:Name="PlayPauseIcon"
                           Data="{Binding PlayPauseIconData}"
                           Fill="{Binding IconFillBrush}"
@@ -88,6 +90,7 @@
 				<Border Grid.Row="0" Grid.Column="1"
                             Background="Transparent"
                             Cursor="Hand"
+                            IsEnabled="{Binding IsJiraReady}"
                             MouseDown="UpperArea_MouseDown"
                             MouseMove="UpperArea_MouseMove"
                             MouseUp="UpperArea_MouseUp">

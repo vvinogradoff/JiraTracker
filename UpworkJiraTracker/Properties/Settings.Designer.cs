@@ -202,5 +202,17 @@ namespace UpworkJiraTracker.Properties {
                 this["JiraClientSecret"] = value;
             }
         }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("5")]
+        public int TopmostEnforcementIntervalSeconds {
+            get {
+                return ((int)(this["TopmostEnforcementIntervalSeconds"]));
+            }
+            set {
+                this["TopmostEnforcementIntervalSeconds"] = value;
+            }
+        }
     }
 }

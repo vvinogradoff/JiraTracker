@@ -74,7 +74,9 @@ public static class Constants
         public static TimeSpan TimeUpdateInterval => TimeSpan.FromSeconds(1);
         public static TimeSpan TopmostEnforcementInterval => TimeSpan.FromSeconds(5);
         public static TimeSpan WindowMonitoringInterval => TimeSpan.FromMilliseconds(500);
-        public static TimeSpan UpworkReadDelay => TimeSpan.FromSeconds(30);
+        public static TimeSpan UpworkReadDelay => TimeSpan.FromSeconds(5);
+        public static TimeSpan UpworkStaleValueRetryDelay => TimeSpan.FromSeconds(5);
+        public static int UpworkStaleValueMaxRetries => 3;
     }
 
     public static class ConfirmationMessages

@@ -21,6 +21,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
         public string Text { get; set; } = string.Empty;
     }
 
+    private readonly Dispatcher _dispatcher;
     private readonly UpworkIntegrationFlaUI _upworkIntegration;
     private readonly UpworkWindowWatcherService _upworkWindowWatcher;
     private readonly JiraOAuthService _jiraService;
@@ -31,11 +32,18 @@ public class MainWindowViewModel : INotifyPropertyChanged
     private readonly DispatcherTimer _timeUpdateTimer;
     private readonly DispatcherTimer _upworkReadTimer;
     private bool _upworkReadTimerPending = false;
+    private bool _isFreshWeeklyTotal = false;
+    private DateTime? _freshTotalResetTime = null;
+    private DateTime? _lastTenMinuteAddTime = null;
+    private UpworkState _upworkState = UpworkState.NoProcess;
 
     private string _displayText = "Upwork Memo";
     private bool _isAutocompleteActive = false;
     private bool _isPlaying = false;
     private bool _isProcessing = false;
+    private bool _isInitializing = true;
+    private bool _isUpworkReady = false;
+    private bool _isJiraReady = false;
     private WpfColor? _customBackgroundColor = null;
     private WpfBrush _backgroundBrush = new WpfSolidColorBrush(WpfColors.Black);
     private WpfBrush _foregroundBrush = new WpfSolidColorBrush(WpfColors.White);
@@ -44,6 +52,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
     private double _iconStrokeThickness = 2;
     private string _timerTime = "0:00";
     private string _playPauseIconData = Constants.Icons.StopIcon;
+    private string _playPauseTooltip = "No Upwork data";
 
     public event PropertyChangedEventHandler? PropertyChanged;
     public event EventHandler? AutocompleteActivated;
@@ -104,6 +113,45 @@ public class MainWindowViewModel : INotifyPropertyChanged
                 _isProcessing = value;
                 OnPropertyChanged();
                 UpdatePlayPauseIcon();
+            }
+        }
+    }
+
+    public bool IsInitializing
+    {
+        get => _isInitializing;
+        private set
+        {
+            if (_isInitializing != value)
+            {
+                _isInitializing = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public bool IsUpworkReady
+    {
+        get => _isUpworkReady;
+        private set
+        {
+            if (_isUpworkReady != value)
+            {
+                _isUpworkReady = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public bool IsJiraReady
+    {
+        get => _isJiraReady;
+        private set
+        {
+            if (_isJiraReady != value)
+            {
+                _isJiraReady = value;
+                OnPropertyChanged();
             }
         }
     }
@@ -213,7 +261,33 @@ public class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    public string PlayPauseTooltip
+    {
+        get => _playPauseTooltip;
+        private set
+        {
+            if (_playPauseTooltip != value)
+            {
+                _playPauseTooltip = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
     public bool IsJiraAuthenticated => _jiraService.IsAuthenticated;
+
+    public UpworkState UpworkState
+    {
+        get => _upworkState;
+        private set
+        {
+            if (_upworkState != value)
+            {
+                _upworkState = value;
+                OnPropertyChanged();
+            }
+        }
+    }
 
     public UpworkIntegrationFlaUI UpworkIntegration => _upworkIntegration;
     public JiraOAuthService JiraService => _jiraService;
@@ -222,14 +296,18 @@ public class MainWindowViewModel : INotifyPropertyChanged
     public TimeTrackingService TimeTrackingService => _timeTrackingService;
     public WindowSettingsService SettingsService => _settingsService;
 
-    public MainWindowViewModel(UpworkIntegrationFlaUI upworkIntegration, JiraOAuthService jiraService, WindowSettingsService settingsService)
+    public MainWindowViewModel()
     {
-        _upworkIntegration = upworkIntegration;
+        // Capture the dispatcher from the UI thread
+        _dispatcher = Dispatcher.CurrentDispatcher;
+
+        // Create services (ViewModel owns the services)
+        _upworkIntegration = new UpworkIntegrationFlaUI();
+        _jiraService = new JiraOAuthService();
+        _settingsService = new WindowSettingsService();
         _upworkWindowWatcher = new UpworkWindowWatcherService();
-        _jiraService = jiraService;
-        _settingsService = settingsService;
-        _jiraCacheService = new JiraIssueCacheService(jiraService);
-        _jiraIssuesService = new JiraIssuesService(jiraService, upworkIntegration, _jiraCacheService);
+        _jiraCacheService = new JiraIssueCacheService(_jiraService);
+        _jiraIssuesService = new JiraIssuesService(_jiraService, _upworkIntegration, _jiraCacheService);
         _timeTrackingService = new TimeTrackingService(_jiraIssuesService);
 
         PlayPauseCommand = new RelayCommand(async _ => await ExecutePlayPauseAsync());
@@ -266,15 +344,6 @@ public class MainWindowViewModel : INotifyPropertyChanged
         UpdateTimes();
         UpdateTimerDisplay();
 
-        // Initialize time tracking mode based on Upwork availability
-        InitializeTrackingMode();
-
-        // Start cache service if authenticated
-        if (_jiraService.IsAuthenticated)
-        {
-            _ = _jiraCacheService.StartAsync();
-        }
-
         // Start Upwork window watcher if enabled (for both modes - in Upwork mode it updates time)
         if (Constants.Upwork.EnableWindowWatcher)
         {
@@ -283,22 +352,77 @@ public class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
-    private void InitializeTrackingMode()
+    /// <summary>
+    /// Async initialization that must be called after construction.
+    /// Call this from Window.Loaded event.
+    /// </summary>
+    public async Task InitializeAsync()
     {
+        // Start Upwork discovery in background
+        _ = Task.Run(async () =>
+        {
+            await InitializeTrackingModeAsync();
+
+            // Update UI on main thread
+            _dispatcher.Invoke(() =>
+            {
+                IsUpworkReady = true;
+                // Check if fully initialized
+                if (IsJiraReady)
+                {
+                    IsInitializing = false;
+                }
+            });
+        });
+
+        // Jira check is instant (just checking if authenticated)
+        IsJiraReady = true;
+        if (_jiraService.IsAuthenticated)
+        {
+            _ = _jiraCacheService.StartAsync();
+        }
+
+        // Update initialization state
+        if (IsUpworkReady && IsJiraReady)
+        {
+            IsInitializing = false;
+        }
+    }
+
+    private async Task InitializeTrackingModeAsync()
+    {
+        // Run diagnostics first to log ALL Upwork windows (helps debug stale window issues)
+        await _upworkIntegration.DumpAllUpworkWindowsDiagnostics();
+
         // Check if Upwork is available
         if (_upworkIntegration.IsUpworkAvailable())
         {
-            // Read initial weekly total from Upwork
-            var weeklyTotal = _upworkIntegration.ReadWeeklyTotal();
+            // Read initial time stats from Upwork (single enumeration for both stats and weekly total)
+            var (timeStats, weeklyTotal) = await _upworkIntegration.ReadAllTimeData();
+
+            // Update tooltip with initial stats
+            if (timeStats != null)
+            {
+                // Create tooltip string on background thread (strings are thread-safe)
+                var tooltipText = timeStats.ToTooltipString();
+
+                _dispatcher.Invoke(() =>
+                {
+                    PlayPauseTooltip = tooltipText;
+                });
+            }
+
             if (weeklyTotal.HasValue)
             {
                 _timeTrackingService.InitializeUpworkMode(weeklyTotal.Value);
+                _dispatcher.Invoke(() => UpworkState = UpworkState.FullyAutomated);
                 System.Diagnostics.Debug.WriteLine($"Initialized in Upwork mode with weekly total: {weeklyTotal.Value}");
             }
             else
             {
                 // Upwork window found but couldn't read time - fall back to internal mode
                 _timeTrackingService.InitializeInternalMode();
+                _dispatcher.Invoke(() => UpworkState = UpworkState.ProcessFoundButCannotAutomate);
                 System.Diagnostics.Debug.WriteLine("Upwork found but couldn't read time - using internal mode");
             }
 
@@ -309,6 +433,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
         {
             // No Upwork - use internal timer mode
             _timeTrackingService.InitializeInternalMode();
+            _dispatcher.Invoke(() => UpworkState = UpworkState.NoProcess);
             System.Diagnostics.Debug.WriteLine("Upwork not found - using internal timer mode");
         }
     }
@@ -428,6 +553,15 @@ public class MainWindowViewModel : INotifyPropertyChanged
         var minutes = time.Minutes;
 
         TimerTime = $"{hours}:{minutes:D2}";
+
+        // Check if we need to reset the fresh indicator
+        if (_isFreshWeeklyTotal && _freshTotalResetTime.HasValue && DateTime.Now >= _freshTotalResetTime.Value)
+        {
+            _isFreshWeeklyTotal = false;
+            _freshTotalResetTime = null;
+            System.Diagnostics.Debug.WriteLine("Fresh weekly total indicator reset");
+            UpdatePlayPauseIcon();
+        }
     }
 
     public void UpdateTimes()
@@ -459,6 +593,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
         // Icons show current STATE (not action to take):
         // - Processing: show grey Play icon (triangle) - inactive
         // - Playing: show green filled Play icon (triangle)
+        //   - With fresh weekly total in Upwork mode: add lightgreen outline
         // - Stopped: show stroke-only Stop icon (square outline)
         if (IsProcessing)
         {
@@ -472,8 +607,18 @@ public class MainWindowViewModel : INotifyPropertyChanged
         {
             PlayPauseIconData = Constants.Icons.PlayIcon;
             IconFillBrush = new WpfSolidColorBrush(WpfColors.LimeGreen);
-            IconStrokeBrush = new WpfSolidColorBrush(WpfColors.Transparent);
-            IconStrokeThickness = 0;
+
+            // Show lightgreen outline if we have fresh weekly total in Upwork mode
+            if (_isFreshWeeklyTotal && _timeTrackingService.IsUpworkMode)
+            {
+                IconStrokeBrush = new WpfSolidColorBrush(WpfColors.LightGreen);
+                IconStrokeThickness = 2;
+            }
+            else
+            {
+                IconStrokeBrush = new WpfSolidColorBrush(WpfColors.Transparent);
+                IconStrokeThickness = 0;
+            }
         }
         else
         {
@@ -497,11 +642,17 @@ public class MainWindowViewModel : INotifyPropertyChanged
             IsProcessing = true;
 
             // Run Upwork automation in background
-            _ = Task.Run(() =>
+            _ = Task.Run(async () =>
             {
                 try
                 {
                     _upworkIntegration.UpdateMemo(DisplayText);
+
+                    // If in Upwork mode, read weekly total after starting to get accurate time
+                    if (_timeTrackingService.IsUpworkMode)
+                    {
+                        await ReadAndUpdateWeeklyTotalAsync();
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -510,7 +661,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
             }).ContinueWith(_ =>
             {
                 // Always mark as complete (even on failure, treat as success per requirements)
-                System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                _dispatcher.Invoke(() =>
                 {
                     IsProcessing = false;
                 });
@@ -528,18 +679,51 @@ public class MainWindowViewModel : INotifyPropertyChanged
             IsProcessing = true;
 
             // Run Upwork stop in background
-            _ = Task.Run(() =>
+            _ = Task.Run(async () =>
             {
                 try
                 {
                     _upworkIntegration.ClickStopTracking();
+
+                    // Read actual time stats and weekly totals after clicking stop (window is now visible)
+                    if (_timeTrackingService.IsUpworkMode)
+                    {
+                        // Read all time data in single enumeration
+                        var (timeStats, actualWeeklyTotal) = await _upworkIntegration.ReadAllTimeData();
+
+                        if (timeStats != null)
+                        {
+                            // Create tooltip string on background thread (strings are thread-safe)
+                            var tooltipText = timeStats.ToTooltipString();
+
+                            await _dispatcher.InvokeAsync(() =>
+                            {
+                                PlayPauseTooltip = tooltipText;
+                            });
+                        }
+
+                        if (actualWeeklyTotal.HasValue)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"Read actual weekly total after stop: {actualWeeklyTotal.Value}");
+
+                            // Update with real value for accurate Jira logging
+                            await _dispatcher.InvokeAsync(() =>
+                            {
+                                _timeTrackingService.UpdateWeeklyTotal(actualWeeklyTotal.Value);
+                                UpdateTimerDisplay();
+                            });
+                        }
+                        else
+                        {
+                            System.Diagnostics.Debug.WriteLine("Could not read actual weekly total after stop, using calculated value");
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {
                     System.Diagnostics.Debug.WriteLine($"Upwork stop failed: {ex.Message}");
                 }
-            }).ContinueWith(async _ =>
-            {
+
                 // Log remaining time to Jira (can run in background too)
                 try
                 {
@@ -551,7 +735,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
                 }
 
                 // Always mark as complete
-                System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                _dispatcher.Invoke(() =>
                 {
                     IsProcessing = false;
                 });
@@ -565,7 +749,8 @@ public class MainWindowViewModel : INotifyPropertyChanged
     {
         try
         {
-            IsPlaying = _upworkIntegration.IsTracking();
+            var isTracking = _upworkIntegration.CheckIsTracking();
+            _dispatcher.Invoke(() => IsPlaying = isTracking);
         }
         catch (Exception ex)
         {
@@ -576,6 +761,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
     public bool ShowAutocomplete()
     {
         if (IsAutocompleteActive) return false;
+        if (!IsJiraReady) return false; // Don't show autocomplete until Jira is ready
 
         IsAutocompleteActive = true;
         AutocompleteActivated?.Invoke(this, EventArgs.Empty);
@@ -587,92 +773,109 @@ public class MainWindowViewModel : INotifyPropertyChanged
         IsAutocompleteActive = false;
     }
 
-    public async void SelectJiraIssue(string key)
+    public Task SelectJiraIssue(string key)
     {
-        if (string.IsNullOrWhiteSpace(key)) return;
+        if (string.IsNullOrWhiteSpace(key)) return Task.CompletedTask;
 
-        var previousKey = DisplayText;
-        DisplayText = key;
-        HideAutocomplete();
+		var issue = _timeTrackingService.GetCachedIssue(key);
+		if (issue == null)
+		{
+			System.Diagnostics.Debug.WriteLine($"Warning: Issue {key} not found in cache, using key only");
+			issue = new IssueDetails(new JiraIssue { Key = key });
+		}
 
-        // Start time tracking immediately (UI responsive)
-        var wasTracking = _timeTrackingService.IsTracking;
-        if (wasTracking)
-        {
-            // Already tracking - handle issue change (log time for previous if >= 10min, keep remainder)
-            if (!string.IsNullOrWhiteSpace(previousKey) && previousKey != key)
-            {
-                await _timeTrackingService.ChangeIssueAsync(key);
-            }
-        }
-        else
-        {
-            // Not tracking - start tracking
-            _timeTrackingService.Start(key);
-            IsPlaying = true;
-        }
+		return SelectJiraIssue(issue);
+	}
 
-        // Run Upwork automation in background
-        IsProcessing = true;
-        _ = Task.Run(() =>
-        {
-            try
-            {
-                _jiraIssuesService.SelectIssue(key);
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Upwork memo update failed: {ex.Message}");
-            }
-        }).ContinueWith(_ =>
-        {
-            System.Windows.Application.Current.Dispatcher.Invoke(() =>
-            {
-                IsProcessing = false;
-            });
-        });
-    }
-
-    public async void SelectJiraIssue(JiraIssue issue)
+    public Task SelectJiraIssue(IssueDetails issue)
     {
-        if (issue == null || string.IsNullOrWhiteSpace(issue.Key)) return;
+        if (issue == null || string.IsNullOrWhiteSpace(issue.Key)) return Task.CompletedTask;
 
         var previousKey = DisplayText;
         DisplayText = issue.Key;
         HideAutocomplete();
 
-        // Start time tracking immediately (UI responsive)
         var wasTracking = _timeTrackingService.IsTracking;
-        if (wasTracking)
-        {
-            // Already tracking - handle issue change (log time for previous if >= 10min, keep remainder)
-            if (!string.IsNullOrWhiteSpace(previousKey) && previousKey != issue.Key)
-            {
-                await _timeTrackingService.ChangeIssueAsync(issue);
-            }
-        }
-        else
-        {
-            // Not tracking - start tracking
-            _timeTrackingService.Start(issue);
-            IsPlaying = true;
-        }
+        var shouldLogPrevious = wasTracking && !string.IsNullOrWhiteSpace(previousKey) && previousKey != issue.Key;
 
-        // Run Upwork automation in background
+        // Run Upwork automation first
         IsProcessing = true;
-        _ = Task.Run(() =>
+        return Task.Run(async () =>
         {
             try
             {
                 _jiraIssuesService.SelectIssue(issue.Key);
+
+                // Read actual time stats and weekly totals after updating Upwork (window is now visible)
+                if (shouldLogPrevious && _timeTrackingService.IsUpworkMode)
+                {
+                    // Read all time data in single enumeration
+                    var (timeStats, actualWeeklyTotal) = await _upworkIntegration.ReadAllTimeData();
+
+                    if (timeStats != null)
+                    {
+                        // Create tooltip string on background thread (strings are thread-safe)
+                        var tooltipText = timeStats.ToTooltipString();
+
+                        await _dispatcher.InvokeAsync(() =>
+                        {
+                            PlayPauseTooltip = tooltipText;
+                        });
+                    }
+
+                    if (actualWeeklyTotal.HasValue)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Read actual weekly total after issue change: {actualWeeklyTotal.Value}");
+
+                        // Update with real value for accurate Jira logging
+                        await _dispatcher.InvokeAsync(() =>
+                        {
+                            _timeTrackingService.UpdateWeeklyTotal(actualWeeklyTotal.Value);
+                            UpdateTimerDisplay();
+                        });
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine("Could not read actual weekly total after issue change, using calculated value");
+                    }
+                }
+
+                // Now log time with actual values
+                if (shouldLogPrevious)
+                {
+                    // Was tracking and switching to different issue - log previous time and switch
+                    await _timeTrackingService.ChangeIssueAsync(issue);
+                    System.Diagnostics.Debug.WriteLine($"Changed issue to {issue.Key}, time logged for previous");
+                }
+                else if (!wasTracking)
+                {
+                    // Not tracking - start tracking
+                    _dispatcher.Invoke(() =>
+                    {
+                        _timeTrackingService.Start(issue);
+                        IsPlaying = true;
+                    });
+                    System.Diagnostics.Debug.WriteLine($"Started tracking {issue.Key}");
+                }
+                else
+                {
+                    // Was tracking same issue - just update memo, no logging needed
+                    System.Diagnostics.Debug.WriteLine($"Same issue {issue.Key}, memo updated only");
+                }
+
+                // Ensure timer display is updated
+                _dispatcher.Invoke(() =>
+                {
+                    UpdateTimerDisplay();
+                });
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Upwork memo update failed: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"Exception details: {ex}");
             }
-        }).ContinueWith(_ =>
-        {
-            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+
+            _dispatcher.Invoke(() =>
             {
                 IsProcessing = false;
             });
@@ -685,13 +888,17 @@ public class MainWindowViewModel : INotifyPropertyChanged
         if (!e.IsOpen || !_timeTrackingService.IsUpworkMode)
             return;
 
-        // Start timer on FIRST occurrence only (don't restart if already running)
-        if (!_upworkReadTimerPending)
+        // Marshal to UI thread since DispatcherTimer must be started from UI thread
+        _dispatcher.BeginInvoke(() =>
         {
-            _upworkReadTimerPending = true;
-            _upworkReadTimer.Start();
-            System.Diagnostics.Debug.WriteLine($"Window detected: {e.Window.Name} - timer started for Upwork read in {Constants.Timeouts.UpworkReadDelay.TotalSeconds}s");
-        }
+            // Start timer on FIRST occurrence only (don't restart if already running)
+            if (!_upworkReadTimerPending)
+            {
+                _upworkReadTimerPending = true;
+                _upworkReadTimer.Start();
+                System.Diagnostics.Debug.WriteLine($"Window detected: {e.Window.Name} - timer started for Upwork read in {Constants.Timeouts.UpworkReadDelay.TotalSeconds}s");
+            }
+        });
     }
 
     private void UpworkReadTimer_Tick(object? sender, System.EventArgs e)
@@ -701,11 +908,11 @@ public class MainWindowViewModel : INotifyPropertyChanged
         _upworkReadTimerPending = false;
 
         // Read weekly total in background
-        _ = Task.Run(() =>
+        _ = Task.Run(async () =>
         {
             try
             {
-                ReadAndUpdateWeeklyTotal();
+                await ReadAndUpdateWeeklyTotalAsync();
             }
             catch (Exception ex)
             {
@@ -714,14 +921,91 @@ public class MainWindowViewModel : INotifyPropertyChanged
         });
     }
 
-    private void ReadAndUpdateWeeklyTotal()
+    private async Task ReadAndUpdateWeeklyTotalAsync()
     {
-        var weeklyTotal = _upworkIntegration.ReadWeeklyTotal();
+        // Read all time data in single enumeration
+        var (timeStats, weeklyTotal) = await _upworkIntegration.ReadAllTimeData();
+
+        // Update tooltip with latest stats
+        if (timeStats != null)
+        {
+            // Create tooltip string on background thread (strings are thread-safe)
+            var tooltipText = timeStats.ToTooltipString();
+
+            _dispatcher.Invoke(() =>
+            {
+                PlayPauseTooltip = tooltipText;
+            });
+        }
         if (weeklyTotal.HasValue)
         {
-            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            _dispatcher.Invoke(() =>
             {
-                _timeTrackingService.UpdateWeeklyTotal(weeklyTotal.Value);
+                var previousTotal = _timeTrackingService.WeeklyTotal;
+                var readValue = weeklyTotal.Value;
+                var now = DateTime.Now;
+
+                // Calculate current 10-minute segment boundary
+                var currentSegmentStart = new DateTime(now.Year, now.Month, now.Day, now.Hour, (now.Minute / 10) * 10, 0);
+
+                // Check if value changed from what Upwork reports
+                if (previousTotal != readValue)
+                {
+                    // Upwork UI updated - use new value
+                    _timeTrackingService.UpdateWeeklyTotal(readValue);
+                    _lastTenMinuteAddTime = null; // Reset fallback tracking
+                    _isFreshWeeklyTotal = true;
+
+                    var currentMinute = now.Minute;
+                    var nextBoundaryMinute = ((currentMinute / 10) + 1) * 10;
+
+                    if (nextBoundaryMinute >= 60)
+                    {
+                        _freshTotalResetTime = new DateTime(now.Year, now.Month, now.Day, now.Hour, 0, 0).AddHours(1);
+                    }
+                    else
+                    {
+                        _freshTotalResetTime = new DateTime(now.Year, now.Month, now.Day, now.Hour, nextBoundaryMinute, 0);
+                    }
+
+                    System.Diagnostics.Debug.WriteLine($"Upwork UI updated: {previousTotal} -> {readValue}. Fresh indicator until {_freshTotalResetTime:HH:mm:ss}");
+                    UpdatePlayPauseIcon();
+                }
+                else
+                {
+                    // Same value - Upwork UI hasn't updated (window likely hidden)
+                    // Fallback: add 10 minutes if we haven't already in this segment
+                    bool canAddTenMinutes = !_lastTenMinuteAddTime.HasValue ||
+                                           _lastTenMinuteAddTime.Value < currentSegmentStart;
+
+                    if (canAddTenMinutes)
+                    {
+                        var adjustedTotal = previousTotal.Add(TimeSpan.FromMinutes(10));
+                        _timeTrackingService.UpdateWeeklyTotal(adjustedTotal);
+                        _lastTenMinuteAddTime = now;
+                        _isFreshWeeklyTotal = true;
+
+                        var currentMinute = now.Minute;
+                        var nextBoundaryMinute = ((currentMinute / 10) + 1) * 10;
+
+                        if (nextBoundaryMinute >= 60)
+                        {
+                            _freshTotalResetTime = new DateTime(now.Year, now.Month, now.Day, now.Hour, 0, 0).AddHours(1);
+                        }
+                        else
+                        {
+                            _freshTotalResetTime = new DateTime(now.Year, now.Month, now.Day, now.Hour, nextBoundaryMinute, 0);
+                        }
+
+                        System.Diagnostics.Debug.WriteLine($"Upwork UI stale ({readValue}). Fallback: added 10min -> {adjustedTotal}. Fresh indicator until {_freshTotalResetTime:HH:mm:ss}");
+                        UpdatePlayPauseIcon();
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Upwork UI stale ({readValue}), already added 10min in this segment at {_lastTenMinuteAddTime:HH:mm:ss}");
+                    }
+                }
+
                 UpdateTimerDisplay();
             });
         }

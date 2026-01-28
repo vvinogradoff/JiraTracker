@@ -49,11 +49,15 @@ public class UpworkWindowWatcherService : IDisposable
         var processes = Process.GetProcessesByName(Constants.Upwork.ProcessName);
         LogEvent("Watcher", $"Found {processes.Length} Upwork processes: [{string.Join(", ", processes.Select(p => $"PID={p.Id}"))}]");
 
-        // Do initial scan to populate known windows (don't notify for existing)
-        ScanWindows(notifyNewWindows: false);
+        // Do initial scan asynchronously to avoid blocking UI thread
+        // The expensive UI Automation calls will run in background
+        _ = Task.Run(() =>
+        {
+            ScanWindows(notifyNewWindows: false);
+            LogEvent("Watcher", $"Started monitoring - tracking {_knownWindows.Count} existing windows");
+        });
 
         _pollTimer.Start();
-        LogEvent("Watcher", $"Started monitoring - tracking {_knownWindows.Count} existing windows");
     }
 
     public void Stop()
@@ -65,16 +69,31 @@ public class UpworkWindowWatcherService : IDisposable
         LogEvent("Watcher", "Stopped monitoring Upwork windows");
     }
 
+    private bool _scanInProgress = false;
+
     private void PollTimer_Tick(object? sender, EventArgs e)
     {
-        try
+        // Skip if a scan is already in progress
+        if (_scanInProgress) return;
+
+        _scanInProgress = true;
+
+        // Run scan in background to avoid blocking UI thread
+        _ = Task.Run(() =>
         {
-            ScanWindows(notifyNewWindows: true);
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"Window watcher poll error: {ex.Message}");
-        }
+            try
+            {
+                ScanWindows(notifyNewWindows: true);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Window watcher poll error: {ex.Message}");
+            }
+            finally
+            {
+                _scanInProgress = false;
+            }
+        });
     }
 
 	private void ScanWindows(bool notifyNewWindows)

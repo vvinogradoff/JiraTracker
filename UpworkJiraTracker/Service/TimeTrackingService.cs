@@ -124,19 +124,16 @@ public class TimeTrackingService
     /// Get cached issue details by key.
     /// </summary>
     public IssueDetails? GetCachedIssue(string key)
-    {
-        return _issueCache.TryGetValue(key, out var issue) ? issue : null;
-    }
+		=> _issueCache.TryGetValue(key, out var issue) ? issue : null;
 
     /// <summary>
     /// Start tracking time with a Jira issue.
     /// In internal mode: calculates initial offset based on current time.
     /// In Upwork mode: no offset, time comes from Upwork.
     /// </summary>
-    public void Start(JiraIssue issue)
+    public void Start(IssueDetails details)
     {
-        var details = new IssueDetails(issue);
-        _issueCache[issue.Key] = details;
+        _issueCache[details.Key] = details;
         StartInternal(details);
     }
 
@@ -191,25 +188,9 @@ public class TimeTrackingService
     /// In internal mode: logs time as-is without rounding.
     /// In Upwork mode: logs time based on Upwork's tracked time.
     /// </summary>
-    public async Task ChangeIssueAsync(JiraIssue newIssue)
+    public async Task ChangeIssueAsync(IssueDetails details)
     {
-        var details = new IssueDetails(newIssue);
-        _issueCache[newIssue.Key] = details;
-        await ChangeIssueInternalAsync(details);
-    }
-
-    /// <summary>
-    /// Change the current issue being tracked by key. Uses cached issue details.
-    /// </summary>
-    public async Task ChangeIssueAsync(string newIssueKey)
-    {
-        var details = GetCachedIssue(newIssueKey);
-        if (details == null)
-        {
-            System.Diagnostics.Debug.WriteLine($"Warning: Issue {newIssueKey} not found in cache, using key only");
-            details = new IssueDetails(new JiraIssue { Key = newIssueKey });
-            _issueCache[newIssueKey] = details;
-        }
+        _issueCache[details.Key] = details;
         await ChangeIssueInternalAsync(details);
     }
 

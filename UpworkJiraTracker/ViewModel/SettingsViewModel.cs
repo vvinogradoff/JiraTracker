@@ -19,6 +19,7 @@ public class SettingsViewModel : INotifyPropertyChanged
     private double _mainWindowWidth = 180;
     private double _mainWindowHeight = 48;
     private string _logDirectory = ".";
+    private int _topmostEnforcementIntervalSeconds = 5;
 
     public event PropertyChangedEventHandler? PropertyChanged;
     public event EventHandler? PickColorRequested;
@@ -147,6 +148,44 @@ public class SettingsViewModel : INotifyPropertyChanged
                 _logDirectory = value;
                 OnPropertyChanged();
             }
+        }
+    }
+
+    public int TopmostEnforcementIntervalSeconds
+    {
+        get => _topmostEnforcementIntervalSeconds;
+        set
+        {
+            if (_topmostEnforcementIntervalSeconds != value)
+            {
+                _topmostEnforcementIntervalSeconds = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Async initialization that checks Upwork state.
+    /// Call this from Window.Loaded event.
+    /// </summary>
+    public async Task InitializeUpworkStateAsync(Service.UpworkIntegrationFlaUI upworkIntegration)
+    {
+        // Check if Upwork process is available
+        if (!upworkIntegration.IsUpworkAvailable())
+        {
+            UpworkState = UpworkState.NoProcess;
+            return;
+        }
+
+        // Process is available, check if we can automate it
+        var weeklyTotal = await upworkIntegration.ReadWeeklyTotal();
+        if (weeklyTotal.HasValue)
+        {
+            UpworkState = UpworkState.FullyAutomated;
+        }
+        else
+        {
+            UpworkState = UpworkState.ProcessFoundButCannotAutomate;
         }
     }
 

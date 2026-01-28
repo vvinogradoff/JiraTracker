@@ -8,6 +8,7 @@ using UpworkJiraTracker.ViewModel;
 using UpworkJiraTracker.Service;
 using UpworkJiraTracker.Model;
 using UpworkJiraTracker.Helper;
+using UpworkJiraTracker.Extensions;
 
 namespace UpworkJiraTracker.View;
 
@@ -30,14 +31,12 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
-        // Initialize services
-        _settingsService = new WindowSettingsService();
-        var upworkIntegration = new UpworkIntegrationFlaUI();
-        var jiraService = new JiraOAuthService();
-
-        // Initialize ViewModel
-        _viewModel = new MainWindowViewModel(upworkIntegration, jiraService, _settingsService);
+        // Initialize ViewModel (it creates its own services)
+        _viewModel = new MainWindowViewModel();
         DataContext = _viewModel;
+
+        // Keep reference to settings service from ViewModel
+        _settingsService = _viewModel.SettingsService;
 
         // Load window position and size
         var settings = _settingsService.Load();
@@ -51,7 +50,7 @@ public partial class MainWindow : Window
 
         // Ensure window is always on top
         Topmost = true;
-        Loaded += (s, e) => SetTopmostAboveTaskbar();
+        Loaded += OnWindowLoaded;
 
         // Wire up autocomplete events
         JiraAutocomplete.TextChanged += JiraAutocomplete_TextChanged;
@@ -65,12 +64,24 @@ public partial class MainWindow : Window
         _viewModel.JiraIssuesService.LoadingStateChanged += JiraIssuesService_LoadingStateChanged;
 
         // Initialize topmost enforcement timer
+        var intervalSeconds = Properties.Settings.Default.TopmostEnforcementIntervalSeconds;
+        if (intervalSeconds < 1) intervalSeconds = 5; // Default to 5 seconds if invalid
+        if (intervalSeconds > 60) intervalSeconds = 60; // Cap at 60 seconds
+
         _topmostTimer = new DispatcherTimer
         {
-            Interval = Constants.Timeouts.TopmostEnforcementInterval
+            Interval = TimeSpan.FromSeconds(intervalSeconds)
         };
         _topmostTimer.Tick += (s, e) => SetTopmostAboveTaskbar();
         _topmostTimer.Start();
+    }
+
+    private async void OnWindowLoaded(object? sender, RoutedEventArgs e)
+    {
+        SetTopmostAboveTaskbar();
+
+        // Initialize async services (don't wait - fire and forget)
+        _ = _viewModel.InitializeAsync();
     }
 
     private static (double Left, double Top) ConstrainToScreen(double left, double top, double width, double height)
@@ -336,15 +347,17 @@ public partial class MainWindow : Window
 
     private void JiraAutocomplete_TextSubmitted(object? sender, string text)
     {
-        // This is for manual text entry (typing a key directly)
-        _viewModel.SelectJiraIssue(text);
+		// This is for manual text entry (typing a key directly)
+		_viewModel.SelectJiraIssue(text)
+			.ForgetOnFirstAwait();
     }
 
-    private void JiraAutocomplete_IssueSelected(object? sender, JiraIssue issue)
+    private void JiraAutocomplete_IssueSelected(object? sender, IssueDetails issue)
     {
         // This is for selecting from the dropdown with full issue details
-        _viewModel.SelectJiraIssue(issue);
-    }
+        _viewModel.SelectJiraIssue(issue)
+			.ForgetOnFirstAwait();
+	}
 
     private void JiraAutocomplete_PreviewKeyDown(object? sender, WpfKeyEventArgs e)
     {
@@ -368,13 +381,28 @@ public partial class MainWindow : Window
 
     private void ShowSettingsWindow()
     {
-        if (_settingsWindow != null && _settingsWindow.IsVisible)
+        // Check if settings window already exists and is visible
+        try
         {
-            _settingsWindow.Activate();
-            return;
+            if (_settingsWindow != null && _settingsWindow.IsVisible)
+            {
+                _settingsWindow.Activate();
+                return;
+            }
+        }
+        catch
+        {
+            // Window might be in invalid state, reset reference
+            _settingsWindow = null;
         }
 
-        _settingsWindow = new SettingsWindow(this, _viewModel.UpworkIntegration, _viewModel.JiraService)
+        // Clean up old reference if window was closed
+        if (_settingsWindow != null)
+        {
+            _settingsWindow = null;
+        }
+
+        _settingsWindow = new SettingsWindow(this)
         {
             Owner = this
         };

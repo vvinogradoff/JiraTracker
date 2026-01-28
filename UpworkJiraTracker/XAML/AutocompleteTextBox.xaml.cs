@@ -24,7 +24,7 @@ public partial class AutocompleteTextBox : WpfUserControl
 
     public event EventHandler<string>? TextSubmitted;
     public event EventHandler<string>? TextChanged;
-    public event EventHandler<JiraIssue>? IssueSelected;
+    public event EventHandler<IssueDetails>? IssueSelected;
     public event EventHandler? Cancelled;
 
     public ObservableCollection<JiraIssue> Suggestions { get; } = new();
@@ -43,11 +43,9 @@ public partial class AutocompleteTextBox : WpfUserControl
         Text = InputTextBox.Text;
         TextChanged?.Invoke(this, InputTextBox.Text);
 
-        if (string.IsNullOrWhiteSpace(InputTextBox.Text))
-        {
-            SuggestionsPopup.IsOpen = false;
-        }
-        else if (Suggestions.Count > 0)
+        // Don't auto-close popup on empty text - let UpdateSuggestions control it
+        // This allows default suggestions (Recent, My Issues) to show when text is empty
+        if (!string.IsNullOrWhiteSpace(InputTextBox.Text) && Suggestions.Count > 0)
         {
             SuggestionsPopup.IsOpen = true;
             _selectedIndex = -1;
@@ -160,7 +158,7 @@ public partial class AutocompleteTextBox : WpfUserControl
         InputTextBox.Text = issue.Key;
         Text = issue.Key;
         // Only fire IssueSelected - TextSubmitted is for manual text entry only
-        IssueSelected?.Invoke(this, issue);
+        IssueSelected?.Invoke(this, new IssueDetails(issue));
     }
 
     public void UpdateSuggestions(List<JiraIssue> newSuggestions)

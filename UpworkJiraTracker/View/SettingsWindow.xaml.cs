@@ -18,28 +18,27 @@ public partial class SettingsWindow : Window
     private readonly MainWindow _mainWindow;
     private readonly MainWindowViewModel _mainViewModel;
     private readonly SettingsViewModel _viewModel;
-    private readonly UpworkIntegrationFlaUI _upworkIntegration;
-    private readonly JiraOAuthService _jiraService;
     private bool _isShowingDialog = false;
+    private bool _isClosing = false;
 
-    public SettingsWindow(MainWindow mainWindow, UpworkIntegrationFlaUI upworkIntegration, JiraOAuthService jiraService)
+    public SettingsWindow(MainWindow mainWindow)
     {
         InitializeComponent();
         _mainWindow = mainWindow;
         _mainViewModel = mainWindow.ViewModel;
-        _upworkIntegration = upworkIntegration;
-        _jiraService = jiraService;
 
-        _jiraService.AuthenticationCompleted += JiraService_AuthenticationCompleted;
-        _jiraService.AuthenticationFailed += JiraService_AuthenticationFailed;
-        _jiraService.Disconnected += JiraService_Disconnected;
+        _mainViewModel.JiraService.AuthenticationCompleted += JiraService_AuthenticationCompleted;
+        _mainViewModel.JiraService.AuthenticationFailed += JiraService_AuthenticationFailed;
+        _mainViewModel.JiraService.Disconnected += JiraService_Disconnected;
+        _mainViewModel.PropertyChanged += MainViewModel_PropertyChanged;
 
         _viewModel = new SettingsViewModel
         {
             CustomBackgroundColor = _mainViewModel.CustomBackgroundColor,
             MainWindowWidth = _mainWindow.Width,
             MainWindowHeight = _mainWindow.Height,
-            LogDirectory = Properties.Settings.Default.LogDirectory ?? "."
+            LogDirectory = Properties.Settings.Default.LogDirectory ?? ".",
+            TopmostEnforcementIntervalSeconds = Properties.Settings.Default.TopmostEnforcementIntervalSeconds
         };
 
         // Populate ViewModel timezones from MainWindowViewModel
@@ -59,24 +58,17 @@ public partial class SettingsWindow : Window
         _viewModel.ConnectJiraRequested += (s, e) => ConnectJira();
         _viewModel.DisconnectJiraRequested += (s, e) => DisconnectJira();
         _viewModel.BrowseLogDirectoryRequested += (s, e) => BrowseLogDirectory();
+		// Subscribe to ViewModel changes
+		_viewModel.PropertyChanged += ViewModel_PropertyChanged;
 
-        // Update Jira UI state
-        UpdateJiraUIState();
+		// Update Jira UI state
+		UpdateJiraUIState();
 
-        // Update Upwork UI state
-        UpdateUpworkUIState();
+        // Update Upwork UI state from cached value (instant, no async delay)
+        _viewModel.UpworkState = _mainViewModel.UpworkState;
 
         // Show current background color
         UpdateColorPreview();
-
-        // Subscribe to ViewModel changes
-        _viewModel.PropertyChanged += ViewModel_PropertyChanged;
-
-        ConfirmationOverlay.Confirmed += ConfirmationOverlay_Confirmed;
-        ConfirmationOverlay.Cancelled += ConfirmationOverlay_Cancelled;
-
-        JiraCredentialsOverlay.CredentialsSubmitted += JiraCredentialsOverlay_CredentialsSubmitted;
-        JiraCredentialsOverlay.Cancelled += JiraCredentialsOverlay_Cancelled;
 
         // Position window smartly
         PositionWindow();
@@ -99,6 +91,9 @@ public partial class SettingsWindow : Window
                 SaveSettings();
                 break;
             case nameof(SettingsViewModel.LogDirectory):
+                SaveSettings();
+                break;
+            case nameof(SettingsViewModel.TopmostEnforcementIntervalSeconds):
                 SaveSettings();
                 break;
         }
@@ -165,6 +160,13 @@ public partial class SettingsWindow : Window
         if (Top + Height > workArea.Bottom) Top = workArea.Bottom - Height;
     }
 
+    private void MinimizeButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_isClosing) return;
+        _isClosing = true;
+        Close();
+    }
+
     private void CloseButton_Click(object sender, RoutedEventArgs e)
     {
         ConfirmationOverlay.Visibility = Visibility.Visible;
@@ -178,6 +180,7 @@ public partial class SettingsWindow : Window
     private void ConfirmationOverlay_Cancelled(object? sender, EventArgs e)
     {
         ConfirmationOverlay.Visibility = Visibility.Collapsed;
+        Activate();
     }
 
     private void PickColor()
@@ -276,6 +279,9 @@ public partial class SettingsWindow : Window
 			// Save log directory
 			settings.LogDirectory = _viewModel.LogDirectory ?? ".";
 
+			// Save topmost enforcement interval
+			settings.TopmostEnforcementIntervalSeconds = _viewModel.TopmostEnforcementIntervalSeconds;
+
 			// Sync timezones back to MainWindowViewModel
 			_mainViewModel.Timezones.Clear();
 			foreach (var tz in _viewModel.Timezones)
@@ -350,31 +356,10 @@ public partial class SettingsWindow : Window
 
     private void UpdateJiraUIState()
     {
-        _viewModel.IsJiraConnected = _jiraService.IsAuthenticated;
-        _viewModel.JiraStatusText = _jiraService.IsAuthenticated
+        _viewModel.IsJiraConnected = _mainViewModel.JiraService.IsAuthenticated;
+        _viewModel.JiraStatusText = _mainViewModel.JiraService.IsAuthenticated
             ? "Connected to Jira"
             : "Not connected";
-    }
-
-    private void UpdateUpworkUIState()
-    {
-        // Check if Upwork process is available
-        if (!_upworkIntegration.IsUpworkAvailable())
-        {
-            _viewModel.UpworkState = Model.UpworkState.NoProcess;
-            return;
-        }
-
-        // Process is available, check if we can automate it
-        var weeklyTotal = _upworkIntegration.ReadWeeklyTotal();
-        if (weeklyTotal.HasValue)
-        {
-            _viewModel.UpworkState = Model.UpworkState.FullyAutomated;
-        }
-        else
-        {
-            _viewModel.UpworkState = Model.UpworkState.ProcessFoundButCannotAutomate;
-        }
     }
 
     private async void ConnectJira()
@@ -382,7 +367,7 @@ public partial class SettingsWindow : Window
         try
         {
             // Check if credentials are already stored
-            if (!_jiraService.HasCredentials)
+            if (!_mainViewModel.JiraService.HasCredentials)
             {
                 // Show credentials overlay
                 var settings = Properties.Settings.Default;
@@ -409,7 +394,7 @@ public partial class SettingsWindow : Window
             _isShowingDialog = true;
             _viewModel.JiraStatusText = "Connecting...";
 
-            var success = await _jiraService.StartAuthenticationFlowAsync();
+            var success = await _mainViewModel.JiraService.StartAuthenticationFlowAsync();
 
             if (!success)
             {
@@ -431,15 +416,19 @@ public partial class SettingsWindow : Window
         JiraCredentialsOverlay.Visibility = Visibility.Collapsed;
 
         // Save credentials
-        _jiraService.SetCredentials(credentials.ClientId, credentials.ClientSecret);
+        _mainViewModel.JiraService.SetCredentials(credentials.ClientId, credentials.ClientSecret);
 
         // Start authentication flow
         await StartJiraAuthenticationFlow();
+
+        // Re-activate window after auth flow completes
+        Activate();
     }
 
     private void JiraCredentialsOverlay_Cancelled(object? sender, EventArgs e)
     {
         JiraCredentialsOverlay.Visibility = Visibility.Collapsed;
+        Activate();
     }
 
     private async void DisconnectJira()
@@ -447,7 +436,7 @@ public partial class SettingsWindow : Window
         try
         {
             _viewModel.JiraStatusText = "Disconnecting...";
-            await _jiraService.DisconnectAsync();
+            await _mainViewModel.JiraService.DisconnectAsync();
         }
         catch (Exception ex)
         {
@@ -479,10 +468,29 @@ public partial class SettingsWindow : Window
         });
     }
 
+    private void MainViewModel_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MainWindowViewModel.UpworkState))
+        {
+            Dispatcher.Invoke(() =>
+            {
+                _viewModel.UpworkState = _mainViewModel.UpworkState;
+            });
+        }
+    }
+
 	private void Window_Deactivated(object? sender, EventArgs e)
     {
+        // Don't auto-hide if already closing
+        if (_isClosing)
+            return;
+
         // Don't auto-hide if confirmation overlay is visible
         if (ConfirmationOverlay.Visibility == Visibility.Visible)
+            return;
+
+        // Don't auto-hide if Jira credentials overlay is visible
+        if (JiraCredentialsOverlay.Visibility == Visibility.Visible)
             return;
 
         // Don't auto-hide if showing a dialog (color picker, etc.)
@@ -490,6 +498,18 @@ public partial class SettingsWindow : Window
             return;
 
         // Auto-hide when clicking outside (context menu behavior)
+        _isClosing = true;
         Close();
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        // Unsubscribe from events to prevent crashes when reopening
+        _mainViewModel.JiraService.AuthenticationCompleted -= JiraService_AuthenticationCompleted;
+        _mainViewModel.JiraService.AuthenticationFailed -= JiraService_AuthenticationFailed;
+        _mainViewModel.JiraService.Disconnected -= JiraService_Disconnected;
+        _mainViewModel.PropertyChanged -= MainViewModel_PropertyChanged;
+
+        base.OnClosed(e);
     }
 }
