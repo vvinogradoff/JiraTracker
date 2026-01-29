@@ -21,23 +21,10 @@ public class JiraIssueCacheService : IDisposable
     private bool _isRefreshing = false;
     private bool _disposed = false;
 
-    public event EventHandler? CacheRefreshed;
-    public event EventHandler<string>? RefreshFailed;
-
     /// <summary>
     /// Returns true if the cache has any issues
     /// </summary>
     public bool HasCachedIssues => !_issueCache.IsEmpty;
-
-    /// <summary>
-    /// Returns the number of cached issues
-    /// </summary>
-    public int CachedIssueCount => _issueCache.Count;
-
-    /// <summary>
-    /// Returns true if a refresh is currently in progress
-    /// </summary>
-    public bool IsRefreshing => _isRefreshing;
 
     public JiraIssueCacheService(JiraOAuthService authService)
     {
@@ -99,7 +86,6 @@ public class JiraIssueCacheService : IDisposable
                 }
 
                 System.Diagnostics.Debug.WriteLine($"Jira cache refreshed with {issues.Count} issues");
-                CacheRefreshed?.Invoke(this, EventArgs.Empty);
             }
             else
             {
@@ -109,7 +95,6 @@ public class JiraIssueCacheService : IDisposable
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"Cache refresh failed: {ex.Message}");
-            RefreshFailed?.Invoke(this, ex.Message);
         }
         finally
         {

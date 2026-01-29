@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using UpworkJiraTracker.Model;
+using UpworkJiraTracker.Model.EventArgs;
 
 namespace UpworkJiraTracker.Service;
 
@@ -16,7 +17,7 @@ public class JiraIssuesService
     // Cache for default suggestions (Recent, My Issues, New sections)
     private List<JiraIssue>? _cachedDefaultSuggestions;
 
-    public event EventHandler<List<JiraIssue>>? SuggestionsUpdated;
+    public event EventHandler<SuggestionsUpdatedEventArgs>? SuggestionsUpdated;
     public event EventHandler<bool>? LoadingStateChanged;
     public event EventHandler<WorklogResult>? WorklogCompleted;
 
@@ -56,14 +57,14 @@ public class JiraIssuesService
                     Reporter = ""
                 }
             };
-            SuggestionsUpdated?.Invoke(this, placeholder);
+            SuggestionsUpdated?.Invoke(this, new SuggestionsUpdatedEventArgs(placeholder, isCached: false));
             return;
         }
 
         // Show cached results immediately if available
         if (_cachedDefaultSuggestions != null && _cachedDefaultSuggestions.Count > 0)
         {
-            SuggestionsUpdated?.Invoke(this, _cachedDefaultSuggestions);
+            SuggestionsUpdated?.Invoke(this, new SuggestionsUpdatedEventArgs(_cachedDefaultSuggestions, isCached: false));
         }
         else
         {
@@ -155,7 +156,7 @@ public class JiraIssuesService
                 };
             }
 
-            SuggestionsUpdated?.Invoke(this, suggestions);
+            SuggestionsUpdated?.Invoke(this, new SuggestionsUpdatedEventArgs(suggestions, isCached: false));
         }
         catch
         {
@@ -174,7 +175,7 @@ public class JiraIssuesService
                         Reporter = ""
                     }
                 };
-                SuggestionsUpdated?.Invoke(this, placeholder);
+                SuggestionsUpdated?.Invoke(this, new SuggestionsUpdatedEventArgs(placeholder, isCached: false));
             }
         }
         finally
@@ -194,7 +195,7 @@ public class JiraIssuesService
             // For empty text, show cached default suggestions or trigger load
             if (_cachedDefaultSuggestions != null && _cachedDefaultSuggestions.Count > 0)
             {
-                SuggestionsUpdated?.Invoke(this, _cachedDefaultSuggestions);
+                SuggestionsUpdated?.Invoke(this, new SuggestionsUpdatedEventArgs(_cachedDefaultSuggestions, isCached: false));
             }
             else
             {
@@ -206,7 +207,7 @@ public class JiraIssuesService
 
         var results = _cacheService.Search(text);
 
-        // If no results found, show "Nothing found" placeholder
+        // If no results found, show "Nothing found" placeholder (not cached)
         if (results.Count == 0)
         {
             results = new List<JiraIssue>
@@ -221,9 +222,12 @@ public class JiraIssuesService
                     Reporter = ""
                 }
             };
+            SuggestionsUpdated?.Invoke(this, new SuggestionsUpdatedEventArgs(results, isCached: false));
+            return;
         }
 
-        SuggestionsUpdated?.Invoke(this, results);
+        // Results from cache - mark as cached
+        SuggestionsUpdated?.Invoke(this, new SuggestionsUpdatedEventArgs(results, isCached: true));
     }
 
     /// <summary>
@@ -253,7 +257,7 @@ public class JiraIssuesService
                     Reporter = ""
                 }
             };
-            SuggestionsUpdated?.Invoke(this, placeholder);
+            SuggestionsUpdated?.Invoke(this, new SuggestionsUpdatedEventArgs(placeholder, isCached: false));
             return;
         }
 
@@ -283,7 +287,8 @@ public class JiraIssuesService
                 };
             }
 
-            SuggestionsUpdated?.Invoke(this, issues);
+            // API results - not cached
+            SuggestionsUpdated?.Invoke(this, new SuggestionsUpdatedEventArgs(issues, isCached: false));
         }
         catch
         {
@@ -300,27 +305,11 @@ public class JiraIssuesService
                     Reporter = ""
                 }
             };
-            SuggestionsUpdated?.Invoke(this, placeholder);
+            SuggestionsUpdated?.Invoke(this, new SuggestionsUpdatedEventArgs(placeholder, isCached: false));
         }
         finally
         {
             LoadingStateChanged?.Invoke(this, false);
-        }
-    }
-
-    /// <summary>
-    /// Legacy search method - routes to cache or API based on availability.
-    /// Prefer using SearchFromCache or SearchFromApiAsync directly.
-    /// </summary>
-    public async Task SearchAsync(string text)
-    {
-        if (HasCachedIssues)
-        {
-            SearchFromCache(text);
-        }
-        else
-        {
-            await SearchFromApiAsync(text);
         }
     }
 
@@ -335,7 +324,7 @@ public class JiraIssuesService
         _cachedDefaultSuggestions = null;
     }
 
-    public async Task<bool> LogTimeAsync(string issueKey, TimeSpan timeSpent)
+    public async Task<bool> LogTimeAsync(string issueKey, TimeSpan timeSpent, string? comment = null, double? remainingEstimateHours = null)
     {
         if (!_authService.IsAuthenticated || string.IsNullOrEmpty(_authService.CloudId))
         {
@@ -348,14 +337,76 @@ public class JiraIssuesService
             return false;
         }
 
+        // Build worklog URL with optional remaining estimate adjustment
         var worklogUrl = $"https://api.atlassian.com/ex/jira/{_authService.CloudId}/rest/api/3/issue/{issueKey}/worklog";
 
-        var worklogData = new
+        if (remainingEstimateHours.HasValue && remainingEstimateHours.Value >= 0)
         {
-            timeSpentSeconds = (int)timeSpent.TotalSeconds,
-			// Started time should be in ISO 8601 format
-			//started = DateTime.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'")
-		};
+            // Convert hours to Jira time format (e.g., "2h", "2h 30m", "0m" for zero)
+            var totalMinutes = (int)Math.Round(remainingEstimateHours.Value * 60);
+            var hours = totalMinutes / 60;
+            var minutes = totalMinutes % 60;
+
+            string newEstimate;
+            if (totalMinutes == 0)
+            {
+                newEstimate = "0m";
+            }
+            else if (hours > 0 && minutes > 0)
+            {
+                newEstimate = $"{hours}h {minutes}m";
+            }
+            else if (hours > 0)
+            {
+                newEstimate = $"{hours}h";
+            }
+            else
+            {
+                newEstimate = $"{minutes}m";
+            }
+
+            worklogUrl += $"?adjustEstimate=new&newEstimate={Uri.EscapeDataString(newEstimate)}";
+            System.Diagnostics.Debug.WriteLine($"Logging worklog with remaining estimate: {newEstimate} (from {remainingEstimateHours.Value} hours = {totalMinutes} minutes)");
+            System.Diagnostics.Debug.WriteLine($"Worklog URL: {worklogUrl}");
+        }
+        else if (remainingEstimateHours.HasValue)
+        {
+            System.Diagnostics.Debug.WriteLine($"Skipping remaining estimate - negative value: {remainingEstimateHours.Value}");
+        }
+
+        // Build worklog data
+        object worklogData;
+        if (!string.IsNullOrWhiteSpace(comment))
+        {
+            // Jira API uses Atlassian Document Format for comments
+            worklogData = new
+            {
+                timeSpentSeconds = (int)timeSpent.TotalSeconds,
+                comment = new
+                {
+                    type = "doc",
+                    version = 1,
+                    content = new[]
+                    {
+                        new
+                        {
+                            type = "paragraph",
+                            content = new[]
+                            {
+                                new { type = "text", text = comment }
+                            }
+                        }
+                    }
+                }
+            };
+        }
+        else
+        {
+            worklogData = new
+            {
+                timeSpentSeconds = (int)timeSpent.TotalSeconds
+            };
+        }
 
         var jsonContent = JsonSerializer.Serialize(worklogData);
         var success = await ExecutePostWithRetryAsync(worklogUrl, jsonContent);
@@ -507,7 +558,10 @@ public class JiraIssuesService
 
             // Log error details for debugging
             var errorBody = await response.Content.ReadAsStringAsync();
-            System.Diagnostics.Debug.WriteLine($"Jira POST error: {response.StatusCode} - {errorBody}");
+            System.Diagnostics.Debug.WriteLine($"Jira POST error: {response.StatusCode}");
+            System.Diagnostics.Debug.WriteLine($"Error body: {errorBody}");
+            System.Diagnostics.Debug.WriteLine($"Request URL: {url}");
+            System.Diagnostics.Debug.WriteLine($"Request body: {jsonContent}");
             return false;
         }
 

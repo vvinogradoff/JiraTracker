@@ -91,6 +91,9 @@
                             Background="Transparent"
                             Cursor="Hand"
                             IsEnabled="{Binding IsJiraReady}"
+                            ToolTip="{Binding JiraIssueTooltip}"
+                            ToolTipService.Placement="Top"
+                            ToolTipService.VerticalOffset="5"
                             MouseDown="UpperArea_MouseDown"
                             MouseMove="UpperArea_MouseMove"
                             MouseUp="UpperArea_MouseUp">

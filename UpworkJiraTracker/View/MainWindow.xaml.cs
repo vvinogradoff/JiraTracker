@@ -35,6 +35,9 @@ public partial class MainWindow : Window
         _viewModel = new MainWindowViewModel();
         DataContext = _viewModel;
 
+        // Set up worklog input delegate
+        _viewModel.RequestWorklogInput = ShowWorklogInputWindow;
+
         // Keep reference to settings service from ViewModel
         _settingsService = _viewModel.SettingsService;
 
@@ -297,8 +300,33 @@ public partial class MainWindow : Window
         await _viewModel.JiraIssuesService.LoadDefaultSuggestionsAsync();
     }
 
-    private void JiraIssuesService_SuggestionsUpdated(object? sender, List<JiraIssue> suggestions)
+    private void JiraIssuesService_SuggestionsUpdated(object? sender, Model.EventArgs.SuggestionsUpdatedEventArgs e)
     {
+        var suggestions = e.Suggestions;
+
+        // Check if cache returned "Nothing found" on non-empty input - fall back to API
+        if (e.IsCached &&
+            suggestions.Count == 1 &&
+            suggestions[0].IsSectionHeader &&
+            suggestions[0].Summary == "Nothing found" &&
+            !string.IsNullOrWhiteSpace(JiraAutocomplete.Text))
+        {
+            // Trigger API search asynchronously
+            _ = Task.Run(async () =>
+            {
+                await _viewModel.JiraIssuesService.SearchFromApiAsync(JiraAutocomplete.Text);
+            });
+            return;
+        }
+
+        // Add "Cached" section header if results are from cache
+        if (e.IsCached && suggestions.Count > 0 && !suggestions[0].IsSectionHeader)
+        {
+            var cachedList = new List<JiraIssue> { JiraIssue.CreateSectionHeader("Cached") };
+            cachedList.AddRange(suggestions);
+            suggestions = cachedList;
+        }
+
         JiraAutocomplete.UpdateSuggestions(suggestions);
     }
 
@@ -409,6 +437,38 @@ public partial class MainWindow : Window
 
         _settingsWindow.Closed += (s, e) => _settingsWindow = null;
         _settingsWindow.Show();
+    }
+
+    #endregion
+
+    #region Worklog Input Window
+
+    /// <summary>
+    /// Shows the worklog input window and returns the user's input.
+    /// </summary>
+    /// <returns>Tuple of (comment, remainingEstimateHours) or (null, null) if cancelled</returns>
+    public (string? Comment, double? RemainingEstimateHours) ShowWorklogInputWindow()
+    {
+        var worklogWindow = new WorklogInputWindow
+        {
+            Owner = this
+        };
+
+        // Position above this window after it's loaded
+        worklogWindow.Loaded += (s, e) => worklogWindow.PositionAbove(this);
+
+        worklogWindow.ShowDialog();
+
+        if (worklogWindow.Submitted)
+        {
+            var comment = string.IsNullOrWhiteSpace(worklogWindow.WorkDescription)
+                ? null
+                : worklogWindow.WorkDescription;
+
+            return (comment, worklogWindow.RemainingEstimateHours);
+        }
+
+        return (null, null);
     }
 
     #endregion

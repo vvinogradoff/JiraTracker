@@ -188,13 +188,13 @@ public class TimeTrackingService
     /// In internal mode: logs time as-is without rounding.
     /// In Upwork mode: logs time based on Upwork's tracked time.
     /// </summary>
-    public async Task ChangeIssueAsync(IssueDetails details)
+    public async Task ChangeIssueAsync(IssueDetails details, string? comment = null, double? remainingEstimateHours = null)
     {
         _issueCache[details.Key] = details;
-        await ChangeIssueInternalAsync(details);
+        await ChangeIssueInternalAsync(details, comment, remainingEstimateHours);
     }
 
-    private async Task ChangeIssueInternalAsync(IssueDetails newIssue)
+    private async Task ChangeIssueInternalAsync(IssueDetails newIssue, string? comment = null, double? remainingEstimateHours = null)
     {
         if (!_isTracking)
         {
@@ -229,7 +229,7 @@ public class TimeTrackingService
             // In Upwork mode, don't log zero time
             if (totalTime > TimeSpan.Zero)
             {
-                await _jiraIssuesService.LogTimeAsync(_currentIssue.Key, totalTime);
+                await _jiraIssuesService.LogTimeAsync(_currentIssue.Key, totalTime, comment, remainingEstimateHours);
             }
             else
             {
@@ -245,7 +245,7 @@ public class TimeTrackingService
             var minTime = Constants.TimeTracking.MinimumTimeInternalMode;
             if (totalTime >= minTime)
             {
-                await _jiraIssuesService.LogTimeAsync(_currentIssue.Key, totalTime);
+                await _jiraIssuesService.LogTimeAsync(_currentIssue.Key, totalTime, comment, remainingEstimateHours);
             }
             else
             {
@@ -262,7 +262,7 @@ public class TimeTrackingService
     /// <summary>
     /// Stop tracking. Logs time as-is without rounding.
     /// </summary>
-    public async Task StopAsync()
+    public async Task StopAsync(string? comment = null, double? remainingEstimateHours = null)
     {
         if (!_isTracking)
         {
@@ -293,7 +293,7 @@ public class TimeTrackingService
             // In Upwork mode, don't log zero time
             if (totalTime > TimeSpan.Zero)
             {
-                await _jiraIssuesService.LogTimeAsync(_currentIssue.Key, totalTime);
+                await _jiraIssuesService.LogTimeAsync(_currentIssue.Key, totalTime, comment, remainingEstimateHours);
             }
             else
             {
@@ -306,7 +306,7 @@ public class TimeTrackingService
             var minTime = Constants.TimeTracking.MinimumTimeInternalMode;
             if (totalTime >= minTime)
             {
-                await _jiraIssuesService.LogTimeAsync(_currentIssue.Key, totalTime);
+                await _jiraIssuesService.LogTimeAsync(_currentIssue.Key, totalTime, comment, remainingEstimateHours);
             }
             else
             {

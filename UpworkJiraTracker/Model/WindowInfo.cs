@@ -12,7 +12,6 @@ namespace UpworkJiraTracker.Model
 		public string Name { get; set; } = "";
 		public string ClassName { get; set; } = "";
 		public string ControlType { get; set; } = "";
-		public string AutomationId { get; set; } = "";
 		public string BoundingRectangle { get; set; } = "";
 		public int ChildCount { get; set; }
 		public int ProcessId { get; set; }

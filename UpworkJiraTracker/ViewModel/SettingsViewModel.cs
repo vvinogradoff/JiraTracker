@@ -164,31 +164,6 @@ public class SettingsViewModel : INotifyPropertyChanged
         }
     }
 
-    /// <summary>
-    /// Async initialization that checks Upwork state.
-    /// Call this from Window.Loaded event.
-    /// </summary>
-    public async Task InitializeUpworkStateAsync(Service.UpworkIntegrationFlaUI upworkIntegration)
-    {
-        // Check if Upwork process is available
-        if (!upworkIntegration.IsUpworkAvailable())
-        {
-            UpworkState = UpworkState.NoProcess;
-            return;
-        }
-
-        // Process is available, check if we can automate it
-        var weeklyTotal = await upworkIntegration.ReadWeeklyTotal();
-        if (weeklyTotal.HasValue)
-        {
-            UpworkState = UpworkState.FullyAutomated;
-        }
-        else
-        {
-            UpworkState = UpworkState.ProcessFoundButCannotAutomate;
-        }
-    }
-
     protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
     {
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));

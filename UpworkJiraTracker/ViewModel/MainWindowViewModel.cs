@@ -53,9 +53,16 @@ public class MainWindowViewModel : INotifyPropertyChanged
     private string _timerTime = "0:00";
     private string _playPauseIconData = Constants.Icons.StopIcon;
     private string _playPauseTooltip = "No Upwork data";
+    private string? _jiraIssueTooltip = null;
 
     public event PropertyChangedEventHandler? PropertyChanged;
     public event EventHandler? AutocompleteActivated;
+
+    /// <summary>
+    /// Delegate to request worklog input from the View.
+    /// Returns (comment, remainingEstimateHours) or (null, null) if cancelled.
+    /// </summary>
+    public Func<(string? Comment, double? RemainingEstimateHours)>? RequestWorklogInput { get; set; }
 
     public ICommand PlayPauseCommand { get; }
 
@@ -269,6 +276,19 @@ public class MainWindowViewModel : INotifyPropertyChanged
             if (_playPauseTooltip != value)
             {
                 _playPauseTooltip = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public string? JiraIssueTooltip
+    {
+        get => _jiraIssueTooltip;
+        private set
+        {
+            if (_jiraIssueTooltip != value)
+            {
+                _jiraIssueTooltip = value;
                 OnPropertyChanged();
             }
         }
@@ -513,6 +533,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
         {
             _displayText = lastMemo; // Set directly to avoid triggering save
             OnPropertyChanged(nameof(DisplayText));
+            UpdateJiraIssueTooltip(lastMemo);
         }
     }
 
@@ -678,6 +699,17 @@ public class MainWindowViewModel : INotifyPropertyChanged
             IsPlaying = false;
             IsProcessing = true;
 
+            // Request worklog input from UI (runs on UI thread before background work)
+            string? worklogComment = null;
+            double? remainingEstimate = null;
+
+            if (RequestWorklogInput != null)
+            {
+                var (comment, estimate) = RequestWorklogInput();
+                worklogComment = comment;
+                remainingEstimate = estimate;
+            }
+
             // Run Upwork stop in background
             _ = Task.Run(async () =>
             {
@@ -724,10 +756,10 @@ public class MainWindowViewModel : INotifyPropertyChanged
                     System.Diagnostics.Debug.WriteLine($"Upwork stop failed: {ex.Message}");
                 }
 
-                // Log remaining time to Jira (can run in background too)
+                // Log remaining time to Jira with optional comment and estimate
                 try
                 {
-                    await _timeTrackingService.StopAsync();
+                    await _timeTrackingService.StopAsync(worklogComment, remainingEstimate);
                 }
                 catch (Exception ex)
                 {
@@ -793,10 +825,22 @@ public class MainWindowViewModel : INotifyPropertyChanged
 
         var previousKey = DisplayText;
         DisplayText = issue.Key;
+        UpdateJiraIssueTooltip(issue);
         HideAutocomplete();
 
         var wasTracking = _timeTrackingService.IsTracking;
         var shouldLogPrevious = wasTracking && !string.IsNullOrWhiteSpace(previousKey) && previousKey != issue.Key;
+
+        // Request worklog input if we're about to log time for previous issue
+        string? worklogComment = null;
+        double? remainingEstimate = null;
+
+        if (shouldLogPrevious && RequestWorklogInput != null)
+        {
+            var (comment, estimate) = RequestWorklogInput();
+            worklogComment = comment;
+            remainingEstimate = estimate;
+        }
 
         // Run Upwork automation first
         IsProcessing = true;
@@ -844,7 +888,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
                 if (shouldLogPrevious)
                 {
                     // Was tracking and switching to different issue - log previous time and switch
-                    await _timeTrackingService.ChangeIssueAsync(issue);
+                    await _timeTrackingService.ChangeIssueAsync(issue, worklogComment, remainingEstimate);
                     System.Diagnostics.Debug.WriteLine($"Changed issue to {issue.Key}, time logged for previous");
                 }
                 else if (!wasTracking)
@@ -1012,6 +1056,53 @@ public class MainWindowViewModel : INotifyPropertyChanged
         else
         {
             System.Diagnostics.Debug.WriteLine("Could not read weekly total from Upwork");
+        }
+    }
+
+    private void UpdateJiraIssueTooltip(string issueKey)
+    {
+        if (string.IsNullOrWhiteSpace(issueKey))
+        {
+            JiraIssueTooltip = null;
+            return;
+        }
+
+        var cachedIssue = _timeTrackingService.GetCachedIssue(issueKey);
+        if (cachedIssue != null)
+        {
+            UpdateJiraIssueTooltip(cachedIssue);
+        }
+        else
+        {
+            JiraIssueTooltip = issueKey;
+        }
+    }
+
+    private void UpdateJiraIssueTooltip(IssueDetails issue)
+    {
+        if (issue == null || string.IsNullOrWhiteSpace(issue.Key))
+        {
+            JiraIssueTooltip = null;
+            return;
+        }
+
+        var parts = new List<string> { issue.Key };
+
+        if (!string.IsNullOrWhiteSpace(issue.Assignee))
+            parts.Add(issue.Assignee);
+
+        if (!string.IsNullOrWhiteSpace(issue.Status))
+            parts.Add(issue.Status);
+
+        var firstLine = string.Join(" | ", parts);
+
+        if (!string.IsNullOrWhiteSpace(issue.Summary))
+        {
+            JiraIssueTooltip = $"{firstLine}\n{issue.Summary}";
+        }
+        else
+        {
+            JiraIssueTooltip = firstLine;
         }
     }
 
