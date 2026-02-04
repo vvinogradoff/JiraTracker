@@ -579,7 +579,15 @@ public class MainWindowViewModel : INotifyPropertyChanged
         {
             try
             {
-                CustomBackgroundColor = (WpfColor)WpfColorConverter.ConvertFromString(settings.CustomBackgroundColor);
+                // Handle special "Transparent" value explicitly
+                if (settings.CustomBackgroundColor.Equals("Transparent", StringComparison.OrdinalIgnoreCase))
+                {
+                    CustomBackgroundColor = WpfColor.FromArgb(0, 0, 0, 0);
+                }
+                else
+                {
+                    CustomBackgroundColor = (WpfColor)WpfColorConverter.ConvertFromString(settings.CustomBackgroundColor);
+                }
             }
             catch { }
         }

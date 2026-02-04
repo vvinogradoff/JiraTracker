@@ -5,6 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="clr-namespace:UpworkJiraTracker.ViewModel"
         mc:Ignorable="d"
+		Icon="pack://application:,,,/icon.ico"
         Title="Log Work"
         Width="350"
         SizeToContent="Height"

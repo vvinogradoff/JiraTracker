@@ -132,7 +132,7 @@ public class TimeTrackingService
 		// 1. Log to Jira
 		var jiraSuccess = await _jiraIssuesService.LogTimeAsync(
             issue.Key,
-            timeSpent,
+			roundedTimeSpent,
             comment,
             remainingEstimateHours,
             issue.Summary);
@@ -141,7 +141,7 @@ public class TimeTrackingService
         {
             Success = jiraSuccess,
             IssueKey = issue.Key,
-            TimeLogged = timeSpent,
+            TimeLogged = roundedTimeSpent,
             ErrorMessage = jiraSuccess ? null : "Failed to log time to Jira",
             Comment = comment,
             IssueSummary = issue.Summary,
@@ -154,12 +154,12 @@ public class TimeTrackingService
             issue.Summary,
             issue.Assignee,
             issue.Status,
-            timeSpent,
+			roundedTimeSpent,
             comment,
             remainingEstimateHours);
 
         // 3. Log to Deel (always, regardless of Jira result)
-        LogToDeelAsync(issue.Key, issue.Summary, timeSpent, comment)
+        LogToDeelAsync(issue.Key, issue.Summary, roundedTimeSpent, comment)
 			.ForgetOnFirstAwait();
 
         // 4. Notify listeners

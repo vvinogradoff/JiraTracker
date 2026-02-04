@@ -7,6 +7,7 @@
         xmlns:converters="clr-namespace:UpworkJiraTracker.XAML.Converter"
         xmlns:vm="clr-namespace:UpworkJiraTracker.ViewModel"
         mc:Ignorable="d"
+		Icon="pack://application:,,,/icon.ico"
         Title="Settings"
         Height="500"
         Width="320"
@@ -192,7 +193,7 @@
 							<RowDefinition Height="*"/>
 							<RowDefinition Height="Auto"/>
 						</Grid.RowDefinitions>
-						<TextBlock Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3"
+						<TextBlock Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2"
 								   Text="Integrations:"
 								   Style="{StaticResource StyleSettingsLabel}"/>
 
@@ -260,9 +261,10 @@
 						</Border>
 
 						<!-- Deel show checkbox -->
-						<CheckBox Grid.Column="2" Grid.Row="2"
+						<CheckBox Grid.Column="2" Grid.Row="0"
 								  Content="show"
 								  HorizontalAlignment="Center"
+								  VerticalAlignment="Bottom"
 								  IsChecked="{Binding ShowDeelBrowser}"
 								  ToolTip="Show Deel browser window when logging (uncheck to hide completely)"/>
 

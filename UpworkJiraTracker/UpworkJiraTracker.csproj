@@ -7,7 +7,15 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
   </PropertyGroup>
-
+	
+	<PropertyGroup>
+		<ApplicationIcon>icon.ico</ApplicationIcon>
+	</PropertyGroup>
+	
+	<ItemGroup>
+	  <None Remove="icon.ico" />
+	</ItemGroup>
+	
   <ItemGroup>
     <PackageReference Include="ClosedXML" Version="0.104.1" />
     <PackageReference Include="FlaUI.Core" Version="4.0.0" />
@@ -15,6 +23,10 @@
     <PackageReference Include="Microsoft.Toolkit.Uwp.Notifications" Version="7.1.3" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2792.45" />
     <PackageReference Include="PuppeteerSharp" Version="20.0.0" />
+  </ItemGroup>
+	
+  <ItemGroup>
+    <Resource Include="icon.ico" />
   </ItemGroup>
 
 </Project>

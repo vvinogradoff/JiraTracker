@@ -264,7 +264,9 @@ public partial class SettingsWindow : Window
             _mainViewModel.CustomBackgroundColor = _viewModel.CustomBackgroundColor;
             if (_viewModel.CustomBackgroundColor.HasValue)
             {
-                settings.CustomBackgroundColor = _viewModel.CustomBackgroundColor.Value.ToString();
+                var color = _viewModel.CustomBackgroundColor.Value;
+                // Save transparent color as "Transparent" to preserve it correctly
+                settings.CustomBackgroundColor = color.A == 0 ? "Transparent" : color.ToString();
             }
             else
             {
