@@ -214,5 +214,17 @@ namespace UpworkJiraTracker.Properties {
                 this["TopmostEnforcementIntervalSeconds"] = value;
             }
         }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("True")]
+        public bool ShowDeelBrowser {
+            get {
+                return ((bool)(this["ShowDeelBrowser"]));
+            }
+            set {
+                this["ShowDeelBrowser"] = value;
+            }
+        }
     }
 }

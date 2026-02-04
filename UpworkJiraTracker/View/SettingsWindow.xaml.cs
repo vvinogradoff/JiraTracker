@@ -38,7 +38,8 @@ public partial class SettingsWindow : Window
             MainWindowWidth = _mainWindow.Width,
             MainWindowHeight = _mainWindow.Height,
             LogDirectory = Properties.Settings.Default.LogDirectory ?? ".",
-            TopmostEnforcementIntervalSeconds = Properties.Settings.Default.TopmostEnforcementIntervalSeconds
+            TopmostEnforcementIntervalSeconds = Properties.Settings.Default.TopmostEnforcementIntervalSeconds,
+            ShowDeelBrowser = Properties.Settings.Default.ShowDeelBrowser
         };
 
         foreach (var tz in _mainViewModel.Timezones)
@@ -89,6 +90,9 @@ public partial class SettingsWindow : Window
                 SaveSettings();
                 break;
             case nameof(SettingsViewModel.TopmostEnforcementIntervalSeconds):
+                SaveSettings();
+                break;
+            case nameof(SettingsViewModel.ShowDeelBrowser):
                 SaveSettings();
                 break;
         }
@@ -271,6 +275,7 @@ public partial class SettingsWindow : Window
             settings.MainWindowHeight = _viewModel.MainWindowHeight;
             settings.LogDirectory = _viewModel.LogDirectory ?? ".";
             settings.TopmostEnforcementIntervalSeconds = _viewModel.TopmostEnforcementIntervalSeconds;
+            settings.ShowDeelBrowser = _viewModel.ShowDeelBrowser;
 
             _mainViewModel.Timezones.Clear();
             foreach (var tz in _viewModel.Timezones)

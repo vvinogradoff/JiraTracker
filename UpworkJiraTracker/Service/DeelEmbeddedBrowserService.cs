@@ -86,6 +86,9 @@ public class DeelEmbeddedBrowserService
             bool wasHidden = false;
             bool windowExisted = false;
 
+            // Get the user preference for showing Deel browser
+            bool showDeelBrowser = Properties.Settings.Default.ShowDeelBrowser;
+
             await Application.Current.Dispatcher.InvokeAsync(() =>
             {
                 windowExisted = _browserWindow != null;
@@ -94,15 +97,26 @@ public class DeelEmbeddedBrowserService
                     wasHidden = _browserWindow!.IsHiddenState;
                 }
 
-                // Create or reuse window, start hidden if new
+                // Create or reuse window
                 EnsureWindowExists();
 
                 if (!windowExisted)
                 {
-                    // New window - start hidden
-                    _browserWindow!.StartHidden();
-                    _browserWindow.Show();
-                    Debug.WriteLine("[DeelEmbeddedBrowserService] Created new hidden browser window");
+                    if (showDeelBrowser)
+                    {
+                        // Show minimized in taskbar
+                        _browserWindow!.ShowInTaskbar = true;
+                        _browserWindow.WindowState = WindowState.Minimized;
+                        _browserWindow.Show();
+                        Debug.WriteLine("[DeelEmbeddedBrowserService] Created new minimized browser window");
+                    }
+                    else
+                    {
+                        // Completely hidden
+                        _browserWindow!.StartHidden();
+                        _browserWindow.Show();
+                        Debug.WriteLine("[DeelEmbeddedBrowserService] Created new hidden browser window");
+                    }
                 }
             });
 

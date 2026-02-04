@@ -22,6 +22,7 @@ public class SettingsViewModel : INotifyPropertyChanged
     private double _mainWindowHeight = 48;
     private string _logDirectory = ".";
     private int _topmostEnforcementIntervalSeconds = 5;
+    private bool _showDeelBrowser = true;
 
     public event PropertyChangedEventHandler? PropertyChanged;
     public event EventHandler? PickColorRequested;
@@ -221,6 +222,19 @@ public class SettingsViewModel : INotifyPropertyChanged
             if (_topmostEnforcementIntervalSeconds != value)
             {
                 _topmostEnforcementIntervalSeconds = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public bool ShowDeelBrowser
+    {
+        get => _showDeelBrowser;
+        set
+        {
+            if (_showDeelBrowser != value)
+            {
+                _showDeelBrowser = value;
                 OnPropertyChanged();
             }
         }

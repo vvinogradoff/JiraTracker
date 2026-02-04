@@ -190,6 +190,7 @@
 						<Grid.RowDefinitions>
 							<RowDefinition Height="Auto"/>
 							<RowDefinition Height="*"/>
+							<RowDefinition Height="Auto"/>
 						</Grid.RowDefinitions>
 						<TextBlock Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3"
 								   Text="Integrations:"
@@ -257,6 +258,13 @@
 								</Canvas>
 							</Viewbox>
 						</Border>
+
+						<!-- Deel show checkbox -->
+						<CheckBox Grid.Column="2" Grid.Row="2"
+								  Content="show"
+								  HorizontalAlignment="Center"
+								  IsChecked="{Binding ShowDeelBrowser}"
+								  ToolTip="Show Deel browser window when logging (uncheck to hide completely)"/>
 
 					</Grid>
 

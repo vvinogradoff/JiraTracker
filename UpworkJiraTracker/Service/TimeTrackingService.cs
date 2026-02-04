@@ -1,3 +1,4 @@
+using UpworkJiraTracker.Extensions;
 using UpworkJiraTracker.Model;
 
 namespace UpworkJiraTracker.Service;
@@ -113,6 +114,7 @@ public class TimeTrackingService
         double? remainingEstimateHours = null)
     {
         System.Diagnostics.Debug.WriteLine($"[TimeTrackingService] Logging {timeSpent} for {issue.Key}");
+        System.Diagnostics.Debug.WriteLine($"[TimeTrackingService] Comment='{comment}', RemainingEstimateHours={remainingEstimateHours?.ToString() ?? "null"}");
 
 
 		// Round to nearest 10 minutes
@@ -157,7 +159,8 @@ public class TimeTrackingService
             remainingEstimateHours);
 
         // 3. Log to Deel (always, regardless of Jira result)
-        await LogToDeelAsync(issue.Key, issue.Summary, timeSpent, comment);
+        LogToDeelAsync(issue.Key, issue.Summary, timeSpent, comment)
+			.ForgetOnFirstAwait();
 
         // 4. Notify listeners
         TimeLogged?.Invoke(this, result);

@@ -43,10 +43,19 @@ public partial class DeelBrowserWindow : Window
     public void ShowWindow()
     {
         _isHidden = false;
-        ShowInTaskbar = true;
-        Visibility = Visibility.Visible;
+
+        // Order matters: set state before visibility for proper WPF window restoration
         WindowState = WindowState.Normal;
+        Visibility = Visibility.Visible;
+        ShowInTaskbar = true;
+
+        // Ensure window is brought to front
         Activate();
+        Focus();
+
+        // Topmost trick to ensure it appears on top
+        Topmost = true;
+        Topmost = false;
     }
 
     public void HideWindow()
