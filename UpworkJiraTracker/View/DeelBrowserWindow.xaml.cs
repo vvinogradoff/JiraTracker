@@ -14,11 +14,9 @@ namespace UpworkJiraTracker.View;
 public partial class DeelBrowserWindow : Window
 {
     private readonly DeelBrowserViewModel _viewModel;
-    private bool _isInitialized;
-    private bool _isNavigationComplete;
     private bool _isHidden;
+    private CancellationTokenSource? _authCheckCts;
     private TaskCompletionSource<bool>? _authenticationTcs;
-    private TaskCompletionSource<bool>? _readyTcs;
     private DeelApiClient? _apiClient;
 
     public event EventHandler<bool>? AuthenticationChanged;
@@ -68,15 +66,9 @@ public partial class DeelBrowserWindow : Window
         return _authenticationTcs.Task;
     }
 
-    public Task<bool> WaitForReadyAsync()
-    {
-        if (_isInitialized && _isNavigationComplete)
-            return Task.FromResult(true);
-
-        _readyTcs = new TaskCompletionSource<bool>();
-        return _readyTcs.Task;
-    }
-
+    /// <summary>
+    /// Check authentication via CDP by looking for profile element.
+    /// </summary>
     public async Task<bool> CheckAuthenticationViaCdpAsync()
     {
         if (WebView.CoreWebView2 == null)
@@ -114,39 +106,79 @@ public partial class DeelBrowserWindow : Window
         return url.Contains("/login") || url.Contains("/signin");
     }
 
-    public async Task<bool> WaitForAuthenticationCheckAsync(int maxRetries = 10, int delayMs = 500)
+    /// <summary>
+    /// Starts authentication check loop with timeout from Constants.
+    /// Called when navigation completes.
+    /// </summary>
+    private async Task StartAuthenticationCheckLoopAsync()
     {
-        Debug.WriteLine("[DeelBrowserWindow] Starting authentication check loop...");
+        // Cancel any previous check
+        _authCheckCts?.Cancel();
+        _authCheckCts = new CancellationTokenSource();
+        var token = _authCheckCts.Token;
 
-        if (!_isInitialized || !_isNavigationComplete)
+        var timeout = Constants.Deel.Timeouts.BrowserInitialization;
+        var checkInterval = Constants.Deel.Timeouts.ProfileCheckInterval;
+        var startTime = DateTime.UtcNow;
+
+        Debug.WriteLine($"[DeelBrowserWindow] Starting auth check loop (timeout: {timeout.TotalSeconds}s)");
+        _viewModel.StatusText = " - Checking...";
+
+        try
         {
-            await WaitForReadyAsync();
-        }
-
-        for (int i = 0; i < maxRetries; i++)
-        {
-            Debug.WriteLine($"[DeelBrowserWindow] Auth check attempt {i + 1}/{maxRetries}");
-
-            var isAuthenticated = await CheckAuthenticationViaCdpAsync();
-            if (isAuthenticated)
+            while (!token.IsCancellationRequested && (DateTime.UtcNow - startTime) < timeout)
             {
-                Debug.WriteLine("[DeelBrowserWindow] Authenticated via CDP check");
-                _viewModel.IsAuthenticated = true;
-                AuthenticationChanged?.Invoke(this, true);
-                return true;
+                // Check if on login page - means not authenticated
+                if (IsOnLoginPage())
+                {
+                    Debug.WriteLine("[DeelBrowserWindow] On login page - not authenticated");
+                    SetAuthenticationState(false);
+                    return;
+                }
+
+                // Check for profile element via CDP
+                var isAuthenticated = await CheckAuthenticationViaCdpAsync();
+                if (isAuthenticated)
+                {
+                    Debug.WriteLine("[DeelBrowserWindow] Profile element found - authenticated");
+                    SetAuthenticationState(true);
+                    return;
+                }
+
+                await Task.Delay(checkInterval, token);
             }
 
-            if (IsOnLoginPage())
-            {
-                Debug.WriteLine("[DeelBrowserWindow] On login page - login required");
-                return false;
-            }
-
-            await Task.Delay(delayMs);
+            // Timeout reached without finding profile element
+            Debug.WriteLine("[DeelBrowserWindow] Auth check timeout - assuming not authenticated");
+            SetAuthenticationState(false);
         }
+        catch (OperationCanceledException)
+        {
+            Debug.WriteLine("[DeelBrowserWindow] Auth check cancelled");
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[DeelBrowserWindow] Auth check error: {ex.Message}");
+            SetAuthenticationState(false);
+        }
+    }
 
-        Debug.WriteLine("[DeelBrowserWindow] Auth check timeout - assuming login required");
-        return false;
+    private void SetAuthenticationState(bool isAuthenticated)
+    {
+        var wasAuthenticated = _viewModel.IsAuthenticated;
+        _viewModel.IsAuthenticated = isAuthenticated;
+        _viewModel.StatusText = isAuthenticated ? " - Connected" : " - Please log in";
+
+        if (isAuthenticated && !wasAuthenticated)
+        {
+            AuthenticationChanged?.Invoke(this, true);
+            _authenticationTcs?.TrySetResult(true);
+            _ = ExtractCookiesAndCreateClientAsync();
+        }
+        else if (!isAuthenticated && wasAuthenticated)
+        {
+            AuthenticationChanged?.Invoke(this, false);
+        }
     }
 
     public async Task<DeelApiClient?> ExtractCookiesAndCreateClientAsync()
@@ -176,6 +208,7 @@ public partial class DeelBrowserWindow : Window
 
             client.SetCookies(cookies);
             client.SetPageUrl(WebView.CoreWebView2.Source);
+            _apiClient = client;
 
             return client;
         }
@@ -244,7 +277,6 @@ public partial class DeelBrowserWindow : Window
             var env = await CoreWebView2Environment.CreateAsync(null, userDataFolder);
             await WebView.EnsureCoreWebView2Async(env);
 
-            _isInitialized = true;
             Debug.WriteLine("[DeelBrowserWindow] WebView2 initialized");
         }
         catch (Exception ex)
@@ -274,53 +306,100 @@ public partial class DeelBrowserWindow : Window
         if (!e.IsSuccess)
         {
             _viewModel.StatusText = " - Navigation failed";
-            _isNavigationComplete = true;
-            _readyTcs?.TrySetResult(false);
             return;
         }
 
         var url = WebView.CoreWebView2.Source;
         Debug.WriteLine($"[DeelBrowserWindow] Navigation completed: {url}");
 
-        _isNavigationComplete = true;
+        // Inject CSS to hide unwanted elements via CDP
+        await InjectCleanupCssViaCdpAsync();
 
-        var wasAuthenticated = _viewModel.IsAuthenticated;
-        var urlBasedAuth = url.StartsWith(Constants.Deel.BaseUrl) && url.Contains(Constants.Deel.ContractsUrl);
-
-        if (urlBasedAuth)
-        {
-            var cdpAuth = await CheckAuthenticationViaCdpAsync();
-            _viewModel.IsAuthenticated = cdpAuth;
-
-            if (_viewModel.IsAuthenticated)
-            {
-                _viewModel.StatusText = " - Connected";
-                _apiClient = await ExtractCookiesAndCreateClientAsync();
-
-                if (!wasAuthenticated)
-                {
-                    AuthenticationChanged?.Invoke(this, true);
-                    _authenticationTcs?.TrySetResult(true);
-                }
-            }
-            else
-            {
-                _viewModel.StatusText = " - Please log in";
-            }
-        }
-        else
-        {
-            _viewModel.StatusText = " - Please log in";
-        }
-
-        _readyTcs?.TrySetResult(true);
+        // Start authentication check loop
+        _ = StartAuthenticationCheckLoopAsync();
     }
 
     private void Window_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
+        _authCheckCts?.Cancel();
         _authenticationTcs?.TrySetResult(false);
-        _readyTcs?.TrySetResult(false);
         _apiClient?.Dispose();
         _apiClient = null;
+    }
+
+    /// <summary>
+    /// Injects CSS to hide unwanted UI elements via Chrome DevTools Protocol.
+    /// CDP bypasses CSP restrictions that block JavaScript injection.
+    /// </summary>
+    private async Task InjectCleanupCssViaCdpAsync()
+    {
+        if (WebView.CoreWebView2 == null)
+            return;
+
+        try
+        {
+            const string css = @"
+[data-qa='filterBar'],
+.DeelUIDataGrid-overhead,
+.MuiDataGrid-columnHeaders,
+.DeelUIDataGridControl-wrapper,
+#deel-ai-switch-box {
+    display: none !important;
+}";
+
+            var parameters = System.Text.Json.JsonSerializer.Serialize(new { styleSheetId = "cleanup", text = css });
+
+            // Try using Page.addStyleTag first (more reliable)
+            try
+            {
+                var styleParams = System.Text.Json.JsonSerializer.Serialize(new { content = css });
+                await WebView.CoreWebView2.CallDevToolsProtocolMethodAsync("Page.addStyleTag", styleParams);
+                Debug.WriteLine("[DeelBrowserWindow] CSS injected via Page.addStyleTag");
+            }
+            catch
+            {
+                // Fallback: try CSS.createStyleSheet
+                try
+                {
+                    var frameId = await GetMainFrameIdAsync();
+                    if (!string.IsNullOrEmpty(frameId))
+                    {
+                        var createParams = System.Text.Json.JsonSerializer.Serialize(new { frameId });
+                        var result = await WebView.CoreWebView2.CallDevToolsProtocolMethodAsync("CSS.createStyleSheet", createParams);
+                        var json = System.Text.Json.JsonDocument.Parse(result);
+                        var styleSheetId = json.RootElement.GetProperty("styleSheetId").GetString();
+
+                        if (!string.IsNullOrEmpty(styleSheetId))
+                        {
+                            var setParams = System.Text.Json.JsonSerializer.Serialize(new { styleSheetId, text = css });
+                            await WebView.CoreWebView2.CallDevToolsProtocolMethodAsync("CSS.setStyleSheetText", setParams);
+                            Debug.WriteLine("[DeelBrowserWindow] CSS injected via CSS.createStyleSheet");
+                        }
+                    }
+                }
+                catch (Exception ex2)
+                {
+                    Debug.WriteLine($"[DeelBrowserWindow] CSS.createStyleSheet failed: {ex2.Message}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[DeelBrowserWindow] Failed to inject cleanup CSS: {ex.Message}");
+        }
+    }
+
+    private async Task<string?> GetMainFrameIdAsync()
+    {
+        try
+        {
+            var result = await WebView.CoreWebView2.CallDevToolsProtocolMethodAsync("Page.getFrameTree", "{}");
+            var json = System.Text.Json.JsonDocument.Parse(result);
+            return json.RootElement.GetProperty("frameTree").GetProperty("frame").GetProperty("id").GetString();
+        }
+        catch
+        {
+            return null;
+        }
     }
 }

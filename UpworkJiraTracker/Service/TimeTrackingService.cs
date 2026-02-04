@@ -114,8 +114,21 @@ public class TimeTrackingService
     {
         System.Diagnostics.Debug.WriteLine($"[TimeTrackingService] Logging {timeSpent} for {issue.Key}");
 
-        // 1. Log to Jira
-        var jiraSuccess = await _jiraIssuesService.LogTimeAsync(
+
+		// Round to nearest 10 minutes
+		var roundedTimeSpent = TimeSpan
+			.FromHours((int)timeSpent.TotalMinutes / 60)
+			.Add(TimeSpan.FromMinutes(Math.Round((timeSpent.TotalMinutes % 60) / 10) * 10));
+
+		// Don't log if less than 5 minutes (rounds to 0)
+		if (roundedTimeSpent == TimeSpan.Zero)
+		{
+			System.Diagnostics.Debug.WriteLine($"[TimeTrackingService] Skipping Deel logging: {timeSpent} rounds to 0");
+			return;
+		}
+
+		// 1. Log to Jira
+		var jiraSuccess = await _jiraIssuesService.LogTimeAsync(
             issue.Key,
             timeSpent,
             comment,
@@ -162,21 +175,10 @@ public class TimeTrackingService
                 ? $"{issueKey}. {comment}"
                 : $"{issueKey}. {issueSummary ?? "No description"}";
 
-            // Round to nearest 10 minutes
-            var totalMinutes = (int)timeSpent.TotalMinutes;
-            var roundedMinutes = (int)Math.Round(totalMinutes / 10.0) * 10;
+            var hours = (int)timeSpent.TotalMinutes / 60;
+            var minutes = (int)timeSpent.TotalMinutes % 60;
 
-            // Don't log if less than 5 minutes (rounds to 0)
-            if (roundedMinutes == 0)
-            {
-                System.Diagnostics.Debug.WriteLine($"[TimeTrackingService] Skipping Deel logging: {totalMinutes} minutes rounds to 0");
-                return;
-            }
-
-            var hours = roundedMinutes / 60;
-            var minutes = roundedMinutes % 60;
-
-            System.Diagnostics.Debug.WriteLine($"[TimeTrackingService] Logging to Deel: {totalMinutes}m -> {hours}h {minutes}m (rounded) - {description}");
+            System.Diagnostics.Debug.WriteLine($"[TimeTrackingService] Logging to Deel: {hours}h {minutes}m - {issueKey}. {description}");
 
             var (success, errorMessage) = await _deelService.LogHoursAsync(hours, minutes, description);
 

@@ -106,11 +106,21 @@ public class DeelEmbeddedBrowserService
                 }
             });
 
-            // Wait for page to be ready and check authentication
-            var isAuthenticated = await Application.Current.Dispatcher.InvokeAsync(async () =>
+            // Wait for authentication (the browser window runs auth check loop automatically on navigation)
+            var authTask = Application.Current.Dispatcher.InvokeAsync(async () =>
             {
-                return await _browserWindow!.WaitForAuthenticationCheckAsync(maxRetries: 15, delayMs: 500);
+                return await _browserWindow!.WaitForAuthenticationAsync();
             }).Result;
+
+            var timeout = Constants.Deel.Timeouts.BrowserInitialization + TimeSpan.FromSeconds(5);
+            var timeoutTask = Task.Delay(timeout);
+            var completedTask = await Task.WhenAny(authTask, timeoutTask);
+
+            bool isAuthenticated = false;
+            if (completedTask != timeoutTask)
+            {
+                isAuthenticated = await authTask;
+            }
 
             if (!isAuthenticated)
             {
@@ -121,16 +131,16 @@ public class DeelEmbeddedBrowserService
                     _browserWindow!.ShowWindow();
                 });
 
-                // Wait for user to authenticate (with timeout)
-                var authTask = Application.Current.Dispatcher.InvokeAsync(async () =>
+                // Wait for user to authenticate (with extended timeout for manual login)
+                var manualAuthTask = Application.Current.Dispatcher.InvokeAsync(async () =>
                 {
                     return await _browserWindow!.WaitForAuthenticationAsync();
                 }).Result;
 
-                var timeoutTask = Task.Delay(TimeSpan.FromMinutes(5));
-                var completedTask = await Task.WhenAny(authTask, timeoutTask);
+                var manualTimeoutTask = Task.Delay(TimeSpan.FromMinutes(5));
+                var manualCompletedTask = await Task.WhenAny(manualAuthTask, manualTimeoutTask);
 
-                if (completedTask == timeoutTask || !await authTask)
+                if (manualCompletedTask == manualTimeoutTask || !await manualAuthTask)
                 {
                     Debug.WriteLine("[DeelEmbeddedBrowserService] Authentication timeout or failed");
                     return (false, "Authentication required - please log in to Deel");
@@ -204,63 +214,6 @@ public class DeelEmbeddedBrowserService
         }
 
         return await tcs.Task;
-    }
-
-    /// <summary>
-    /// Log hours using the embedded browser (with visible window)
-    /// </summary>
-    public async Task<(bool Success, string? ErrorMessage)> LogHoursAsync(int hours, int minutes, string description)
-    {
-        try
-        {
-            Debug.WriteLine($"[DeelEmbeddedBrowserService] LogHoursAsync: {hours}h {minutes}m");
-
-            // Open visible window if not open
-            if (_browserWindow == null || !_browserWindow.IsVisible || _browserWindow.IsHiddenState)
-            {
-                var authenticated = await OpenAndWaitForAuthenticationAsync();
-                if (!authenticated)
-                {
-                    return (false, "Not authenticated");
-                }
-            }
-
-            // Wait a bit for window to be ready
-            await Task.Delay(500);
-
-            bool success = false;
-            await Application.Current.Dispatcher.InvokeAsync(async () =>
-            {
-                if (_browserWindow != null && _browserWindow.IsAuthenticated)
-                {
-                    var (ok, _) = await _browserWindow.LogHoursViaApiAsync(hours, minutes, description);
-                    success = ok;
-                }
-            });
-
-            if (success)
-            {
-                return (true, null);
-            }
-
-            return (false, "Failed to log hours");
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[DeelEmbeddedBrowserService] Error: {ex.Message}");
-            return (false, ex.Message);
-        }
-    }
-
-    /// <summary>
-    /// Hide the browser window (keep it running in background)
-    /// </summary>
-    public void HideBrowserWindow()
-    {
-        Application.Current.Dispatcher.Invoke(() =>
-        {
-            _browserWindow?.HideWindow();
-        });
     }
 
     /// <summary>

@@ -633,10 +633,8 @@ public class MainWindowViewModel : INotifyPropertyChanged
     private void UpdateTimerDisplay()
     {
         var time = _timeTrackingService.AccumulatedTime;
-        var hours = (int)time.TotalHours;
-        var minutes = time.Minutes;
 
-        TimerTime = $"{hours}:{minutes:D2}";
+        TimerTime = $"{(int)time.TotalHours}:{time.Minutes:D2}";
 
         // Check if we need to reset the fresh indicator
         if (_isFreshWeeklyTotal && _freshTotalResetTime.HasValue && DateTime.Now >= _freshTotalResetTime.Value)

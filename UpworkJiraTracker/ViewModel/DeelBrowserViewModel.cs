@@ -17,9 +17,12 @@ public class DeelBrowserViewModel : INotifyPropertyChanged
             {
                 _statusText = value;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(WindowTitle));
             }
         }
     }
+
+    public string WindowTitle => $"Deel{_statusText}";
 
     public bool IsAuthenticated
     {

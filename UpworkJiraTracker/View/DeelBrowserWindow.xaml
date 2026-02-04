@@ -5,41 +5,13 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
         mc:Ignorable="d"
-        Title="Deel Time Tracking"
+        Title="{Binding WindowTitle, FallbackValue='Deel Time Tracking'}"
         Height="400"
         Width="650"
         WindowStartupLocation="CenterScreen"
         Closing="Window_Closing">
 
-    <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
-
-        <!-- Header with status -->
-        <Border Grid.Row="0"
-                Background="#F5F5F5"
-                BorderBrush="#CCCCCC"
-                BorderThickness="0,0,0,1"
-                Padding="12,8">
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock Text="Deel"
-                           FontSize="16"
-                           FontWeight="SemiBold"
-                           VerticalAlignment="Center"/>
-                <TextBlock Text="{Binding StatusText, FallbackValue=' - Loading...'}"
-                           FontSize="14"
-                           Foreground="#666666"
-                           VerticalAlignment="Center"
-                           Margin="4,0,0,0"/>
-            </StackPanel>
-        </Border>
-
-        <!-- WebView2 Browser -->
-        <wv2:WebView2 x:Name="WebView"
-                      Grid.Row="1"
-                      NavigationCompleted="WebView_NavigationCompleted"
-                      CoreWebView2InitializationCompleted="WebView_CoreWebView2InitializationCompleted"/>
-    </Grid>
+    <wv2:WebView2 x:Name="WebView"
+                  NavigationCompleted="WebView_NavigationCompleted"
+                  CoreWebView2InitializationCompleted="WebView_CoreWebView2InitializationCompleted"/>
 </Window>
