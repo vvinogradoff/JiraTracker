@@ -182,6 +182,11 @@ public partial class MainWindow : Window
         StartDrag(sender as System.Windows.Controls.Border, e);
     }
 
+    private void TimerArea_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        StartDrag(sender as System.Windows.Controls.Border, e);
+    }
+
     private void StartDrag(System.Windows.Controls.Border? border, MouseButtonEventArgs e)
     {
         if (border == null) return;
@@ -204,6 +209,11 @@ public partial class MainWindow : Window
     }
 
     private void LowerArea_MouseMove(object sender, WpfMouseEventArgs e)
+    {
+        HandleMouseMove(sender as System.Windows.Controls.Border, e);
+    }
+
+    private void TimerArea_MouseMove(object sender, WpfMouseEventArgs e)
     {
         HandleMouseMove(sender as System.Windows.Controls.Border, e);
     }
@@ -241,6 +251,11 @@ public partial class MainWindow : Window
         HandleMouseUp(sender as System.Windows.Controls.Border, e, isUpperArea: false);
     }
 
+    private void TimerArea_MouseUp(object sender, MouseButtonEventArgs e)
+    {
+        HandleTimerAreaMouseUp(sender as System.Windows.Controls.Border, e);
+    }
+
     private void HandleMouseUp(System.Windows.Controls.Border? border, MouseButtonEventArgs e, bool isUpperArea)
     {
         if (border == null) return;
@@ -259,6 +274,27 @@ public partial class MainWindow : Window
                 {
                     ShowSettingsWindow();
                 }
+            }
+            else if (_isDragging)
+            {
+                _settingsService.SavePosition(Left, Top);
+            }
+
+            _isDragging = false;
+        }
+    }
+
+    private void HandleTimerAreaMouseUp(System.Windows.Controls.Border? border, MouseButtonEventArgs e)
+    {
+        if (border == null) return;
+
+        if (border.IsMouseCaptured)
+        {
+            border.ReleaseMouseCapture();
+
+            if (!_isDragging && e.ChangedButton == MouseButton.Left)
+            {
+                ShowTimeLogPopup();
             }
             else if (_isDragging)
             {
@@ -308,16 +344,9 @@ public partial class MainWindow : Window
         if (e.IsCached &&
             suggestions.Count == 1 &&
             suggestions[0].IsSectionHeader &&
-            suggestions[0].Summary == "Nothing found" &&
+            suggestions[0].Summary == Constants.UI.NothingFound &&
             !string.IsNullOrWhiteSpace(JiraAutocomplete.Text))
-        {
-            // Trigger API search asynchronously
-            _ = Task.Run(async () =>
-            {
-                await _viewModel.JiraIssuesService.SearchFromApiAsync(JiraAutocomplete.Text);
-            });
-            return;
-        }
+			return;
 
         // Add "Cached" section header if results are from cache
         if (e.IsCached && suggestions.Count > 0 && !suggestions[0].IsSectionHeader)
@@ -347,8 +376,8 @@ public partial class MainWindow : Window
         // If cache has issues, search instantly (no debounce)
         if (_viewModel.JiraIssuesService.HasCachedIssues)
         {
-            _viewModel.JiraIssuesService.SearchFromCache(text);
-            return;
+			if (_viewModel.JiraIssuesService.SearchFromCache(text))
+				return;
         }
 
         // Cache is empty - fall back to API search with debounce
@@ -437,6 +466,29 @@ public partial class MainWindow : Window
 
         _settingsWindow.Closed += (s, e) => _settingsWindow = null;
         _settingsWindow.Show();
+    }
+
+    private void ShowTimeLogPopup()
+    {
+        try
+        {
+            var timeLogService = _viewModel.TimeTrackingService.TimeLogService;
+            var timeLogViewModel = new TimeLogViewModel(timeLogService);
+            var timeLogPopup = new TimeLogPopup(timeLogViewModel)
+            {
+                Owner = this
+            };
+
+            // Position popup below the main window
+            timeLogPopup.Left = this.Left;
+            timeLogPopup.Top = this.Top + this.ActualHeight + 4;
+
+            timeLogPopup.Show();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Failed to show time log popup: {ex.Message}");
+        }
     }
 
     #endregion

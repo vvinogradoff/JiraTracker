@@ -30,12 +30,8 @@
 												   UnknownStateText="Unknown state"/>
 		<converters:DeelConnectedToFillConverter x:Key="DeelConnectedToFillConverter"/>
 		<converters:DeelConnectedToTooltipConverter x:Key="DeelConnectedToTooltipConverter"
-													DisconnectedText="Left-click: Embedded browser | Right-click: Standalone"
-													ConnectedText="Left-click: Embedded | Right-click: Standalone"/>
-		<converters:JiraConnectedToFillConverter x:Key="JiraConnectedToFillConverter"/>
-		<converters:JiraConnectedToTooltipConverter x:Key="JiraConnectedToTooltipConverter"
-													DisconnectedText="Click to connect to Jira"
-													ConnectedText="Click to disconnect from Jira"/>
+													DisconnectedText="Deel is not connected"
+													ConnectedText="Deel is connected"/>
 	</Window.Resources>
 
 	<Grid>
@@ -188,46 +184,25 @@
 							<ColumnDefinition Width="*"/>
 						</Grid.ColumnDefinitions>
 						<Grid.RowDefinitions>
-							<RowDefinition Height="Auto"/>
+							<RowDefinition Height="*"/>
 							<RowDefinition Height="*"/>
 						</Grid.RowDefinitions>
-						<TextBlock Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3"
-								   Text="Integrations:"
+						<TextBlock Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" 
+								   Text="Jira:"
 								   Style="{StaticResource StyleSettingsLabel}"/>
-
-						<!-- Jira Logo (clickable) -->
-						<Border Grid.Column="0" Grid.Row="1"
-								HorizontalAlignment="Center"
-								VerticalAlignment="Center"
-								Cursor="Hand"
-								MouseDown="JiraIcon_MouseDown"
-								Background="Transparent"
-								ToolTip="{Binding IsJiraConnected, Converter={StaticResource JiraConnectedToTooltipConverter}}">
-							<Viewbox Width="70" Height="32">
-								<Canvas Width="76" Height="32">
-									<!-- Icon: three overlapping document shapes -->
-									<Path Data="{StaticResource JiraLogoPathIcon1}"
-										  Fill="{Binding IsJiraConnected, Converter={StaticResource JiraConnectedToFillConverter}, ConverterParameter=#2684FF}"/>
-									<Path Data="{StaticResource JiraLogoPathIcon2}"
-										  Fill="{Binding IsJiraConnected, Converter={StaticResource JiraConnectedToFillConverter}, ConverterParameter=#2684FF}"/>
-									<Path Data="{StaticResource JiraLogoPathIcon3}"
-										  Fill="{Binding IsJiraConnected, Converter={StaticResource JiraConnectedToFillConverter}, ConverterParameter=#2684FF}"/>
-									<!-- Text: "Jira" -->
-									<Path Data="{StaticResource JiraLogoPathJ}"
-										  Fill="{Binding IsJiraConnected, Converter={StaticResource JiraConnectedToFillConverter}, ConverterParameter=#253858}"/>
-									<Path Data="{StaticResource JiraLogoPathI}"
-										  Fill="{Binding IsJiraConnected, Converter={StaticResource JiraConnectedToFillConverter}, ConverterParameter=#253858}"/>
-									<Path Data="{StaticResource JiraLogoPathR}"
-										  Fill="{Binding IsJiraConnected, Converter={StaticResource JiraConnectedToFillConverter}, ConverterParameter=#253858}"/>
-									<Path Data="{StaticResource JiraLogoPathA}"
-										  Fill="{Binding IsJiraConnected, Converter={StaticResource JiraConnectedToFillConverter}, ConverterParameter=#253858}"/>
-								</Canvas>
-							</Viewbox>
-						</Border>
-
-						<!-- Upwork Icon -->
+						<Button Grid.Column="0" Grid.Row="1" x:Name="ConnectJiraButton"
+								Content="Connect"
+								Visibility="{Binding IsJiraConnected, Converter={StaticResource InverseBoolToVisibilityConverter}}"
+								Command="{Binding ConnectJiraCommand}"
+								Style="{StaticResource SecondaryButtonStyle}"/>
+						<Button Grid.Column="0" Grid.Row="1" x:Name="DisconnectJiraButton"
+								Content="Disconnect"
+								Visibility="{Binding IsJiraConnected, Converter={StaticResource BoolToVisibilityConverter}}"
+								Command="{Binding DisconnectJiraCommand}"
+								Style="{StaticResource SecondaryButtonStyle}"
+								ToolTip="{Binding JiraStatusText}"/>
 						<Border Grid.Column="1" Grid.Row="1"
-								HorizontalAlignment="Center"
+								HorizontalAlignment="Right"
 								VerticalAlignment="Center"
 								ToolTip="{Binding UpworkState, Converter={StaticResource UpworkStateToTooltipConverter}}">
 							<Viewbox Width="90" Height="45">
@@ -239,14 +214,9 @@
 								</Canvas>
 							</Viewbox>
 						</Border>
-
-						<!-- Deel Icon (clickable) -->
 						<Border Grid.Column="2" Grid.Row="1"
 								HorizontalAlignment="Center"
 								VerticalAlignment="Center"
-								Cursor="Hand"
-								MouseDown="DeelIcon_MouseDown"
-								Background="Transparent"
 								ToolTip="{Binding IsDeelConnected, Converter={StaticResource DeelConnectedToTooltipConverter}}">
 							<Viewbox Width="60" Height="45" Stretch="Uniform" Margin="0,-6,0,0">
 								<Canvas Width="214" Height="76">

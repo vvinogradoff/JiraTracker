@@ -36,6 +36,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
     private DateTime? _freshTotalResetTime = null;
     private DateTime? _lastTenMinuteAddTime = null;
     private UpworkState _upworkState = UpworkState.NoProcess;
+    private TimeStats? _baseTimeStats = null; // Base stats from Excel (without current session)
 
     private string _displayText = "Upwork Memo";
     private bool _isAutocompleteActive = false;
@@ -346,6 +347,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
         {
             UpdateTimes();
             UpdateTimerDisplay();
+            UpdateTooltipWithCurrentSession();
         };
         _timeUpdateTimer.Start();
 
@@ -444,6 +446,20 @@ public class MainWindowViewModel : INotifyPropertyChanged
                 _timeTrackingService.InitializeInternalMode();
                 _dispatcher.Invoke(() => UpworkState = UpworkState.ProcessFoundButCannotAutomate);
                 System.Diagnostics.Debug.WriteLine("Upwork found but couldn't read time - using internal mode");
+
+                // Load time stats from Excel file since we can't read from Upwork (async to avoid UI freeze)
+                System.Diagnostics.Debug.WriteLine("[MainWindowViewModel] Loading time stats from Excel (ProcessFoundButCannotAutomate)");
+                var timeLogService = _timeTrackingService.TimeLogService;
+                var stats = await timeLogService.CalculateStatsAsync();
+                var tooltipText = stats.ToTooltipString();
+                System.Diagnostics.Debug.WriteLine($"[MainWindowViewModel] Stats loaded: {tooltipText}");
+
+                _dispatcher.Invoke(() =>
+                {
+                    _baseTimeStats = stats;
+                    PlayPauseTooltip = tooltipText;
+                    System.Diagnostics.Debug.WriteLine($"[MainWindowViewModel] Tooltip set to: {PlayPauseTooltip}");
+                });
             }
 
             // Check if currently tracking
@@ -455,10 +471,24 @@ public class MainWindowViewModel : INotifyPropertyChanged
             _timeTrackingService.InitializeInternalMode();
             _dispatcher.Invoke(() => UpworkState = UpworkState.NoProcess);
             System.Diagnostics.Debug.WriteLine("Upwork not found - using internal timer mode");
+
+            // Load time stats from Excel file (async to avoid UI freeze)
+            System.Diagnostics.Debug.WriteLine("[MainWindowViewModel] Loading time stats from Excel (NoProcess)");
+            var timeLogService = _timeTrackingService.TimeLogService;
+            var stats = await timeLogService.CalculateStatsAsync();
+            var tooltipText = stats.ToTooltipString();
+            System.Diagnostics.Debug.WriteLine($"[MainWindowViewModel] Stats loaded: {tooltipText}");
+
+            _dispatcher.Invoke(() =>
+            {
+                _baseTimeStats = stats;
+                PlayPauseTooltip = tooltipText;
+                System.Diagnostics.Debug.WriteLine($"[MainWindowViewModel] Tooltip set to: {PlayPauseTooltip}");
+            });
         }
     }
 
-	private void OnTimeLogged(object? sender, WorklogResult result)
+	private async void OnTimeLogged(object? sender, WorklogResult result)
     {
         if (result.Success)
         {
@@ -467,6 +497,12 @@ public class MainWindowViewModel : INotifyPropertyChanged
                 $"{result.IssueKey}. Logged {timeFormatted}",
                 null,
                 3000);
+
+            // Refresh tooltip stats after successful time logging (only in non-Upwork mode)
+            if (!_timeTrackingService.IsUpworkMode)
+            {
+                await RefreshTimeStatsTooltipAsync();
+            }
         }
         else
         {
@@ -474,6 +510,33 @@ public class MainWindowViewModel : INotifyPropertyChanged
                 $"Failed to log time to {result.IssueKey}",
                 result.ErrorMessage,
                 5000);
+        }
+    }
+
+    /// <summary>
+    /// Refreshes the play/pause tooltip with current time stats from the Excel file.
+    /// Also updates the base stats cache.
+    /// </summary>
+    private async Task RefreshTimeStatsTooltipAsync()
+    {
+        try
+        {
+            var timeLogService = _timeTrackingService.TimeLogService;
+            // Invalidate cache to force re-read from disk after logging
+            timeLogService.InvalidateCache();
+            var stats = await timeLogService.CalculateStatsAsync();
+            var tooltipText = stats.ToTooltipString();
+
+            _dispatcher.Invoke(() =>
+            {
+                _baseTimeStats = stats;
+                PlayPauseTooltip = tooltipText;
+                System.Diagnostics.Debug.WriteLine($"[MainWindowViewModel] Tooltip refreshed: {PlayPauseTooltip}");
+            });
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[MainWindowViewModel] Failed to refresh tooltip stats: {ex.Message}");
         }
     }
 
@@ -583,6 +646,29 @@ public class MainWindowViewModel : INotifyPropertyChanged
             System.Diagnostics.Debug.WriteLine("Fresh weekly total indicator reset");
             UpdatePlayPauseIcon();
         }
+    }
+
+    /// <summary>
+    /// Updates the tooltip to show base stats plus current session time (non-Upwork mode only).
+    /// </summary>
+    private void UpdateTooltipWithCurrentSession()
+    {
+        // Only update in non-Upwork mode when we have base stats
+        if (_timeTrackingService.IsUpworkMode || _baseTimeStats == null)
+            return;
+
+        // Calculate current session time
+        var currentSessionHours = _timeTrackingService.AccumulatedTime.TotalHours;
+
+        // Create combined stats with current session added to today, this week, and this month
+        var combinedStats = new TimeStats
+        {
+            TodayHours = _baseTimeStats.TodayHours + currentSessionHours,
+            ThisWeekHours = _baseTimeStats.ThisWeekHours + currentSessionHours,
+            ThisMonthHours = _baseTimeStats.ThisMonthHours + currentSessionHours
+        };
+
+        PlayPauseTooltip = combinedStats.ToTooltipString();
     }
 
     public void UpdateTimes()
@@ -1118,6 +1204,16 @@ public class MainWindowViewModel : INotifyPropertyChanged
         _upworkWindowWatcher?.Dispose();
         _jiraCacheService?.Dispose();
         _upworkIntegration?.Dispose();
+
+        // Close Deel browser before exiting
+        try
+        {
+            _timeTrackingService?.CleanupAsync().GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[MainWindowViewModel] Failed to cleanup Deel: {ex.Message}");
+        }
     }
 
     protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)

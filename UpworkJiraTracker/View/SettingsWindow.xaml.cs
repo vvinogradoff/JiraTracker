@@ -18,8 +18,8 @@ public partial class SettingsWindow : Window
     private readonly MainWindow _mainWindow;
     private readonly MainWindowViewModel _mainViewModel;
     private readonly SettingsViewModel _viewModel;
-    private bool _isShowingDialog = false;
-    private bool _isClosing = false;
+    private bool _isShowingDialog;
+    private bool _isClosing;
 
     public SettingsWindow(MainWindow mainWindow)
     {
@@ -32,7 +32,7 @@ public partial class SettingsWindow : Window
         _mainViewModel.JiraService.Disconnected += JiraService_Disconnected;
         _mainViewModel.PropertyChanged += MainViewModel_PropertyChanged;
 
-        _viewModel = new SettingsViewModel
+        _viewModel = new SettingsViewModel(_mainViewModel)
         {
             CustomBackgroundColor = _mainViewModel.CustomBackgroundColor,
             MainWindowWidth = _mainWindow.Width,
@@ -41,7 +41,6 @@ public partial class SettingsWindow : Window
             TopmostEnforcementIntervalSeconds = Properties.Settings.Default.TopmostEnforcementIntervalSeconds
         };
 
-        // Populate ViewModel timezones from MainWindowViewModel
         foreach (var tz in _mainViewModel.Timezones)
         {
             _viewModel.Timezones.Add(tz);
@@ -49,28 +48,23 @@ public partial class SettingsWindow : Window
 
         DataContext = _viewModel;
 
-        // Subscribe to ViewModel command events
         _viewModel.PickColorRequested += (s, e) => PickColor();
-        _viewModel.ResetColorRequested += (s, e) => ResetColor();
-        _viewModel.CloseRequested += (s, e) => ConfirmationOverlay.Visibility = Visibility.Visible;
+        _viewModel.CloseRequested += (s, e) =>
+        {
+            ConfirmationOverlay.ResetToDefault();
+            ConfirmationOverlay.Tag = null;
+            ConfirmationOverlay.Visibility = Visibility.Visible;
+        };
         _viewModel.AddTimezoneRequested += (s, e) => AddTimezone();
-        _viewModel.RemoveTimezoneRequested += (s, entry) => RemoveTimezone(entry);
         _viewModel.ConnectJiraRequested += (s, e) => ConnectJira();
-        _viewModel.DisconnectJiraRequested += (s, e) => DisconnectJira();
         _viewModel.BrowseLogDirectoryRequested += (s, e) => BrowseLogDirectory();
-		// Subscribe to ViewModel changes
-		_viewModel.PropertyChanged += ViewModel_PropertyChanged;
+        _viewModel.OpenTimeLogRequested += (s, e) => OpenTimeLog();
+        _viewModel.MinimizeRequested += (s, e) => Minimize();
+        _viewModel.PropertyChanged += ViewModel_PropertyChanged;
 
-		// Update Jira UI state
-		UpdateJiraUIState();
-
-        // Update Upwork UI state from cached value (instant, no async delay)
+        UpdateJiraUIState();
         _viewModel.UpworkState = _mainViewModel.UpworkState;
-
-        // Show current background color
         UpdateColorPreview();
-
-        // Position window smartly
         PositionWindow();
     }
 
@@ -91,6 +85,7 @@ public partial class SettingsWindow : Window
                 SaveSettings();
                 break;
             case nameof(SettingsViewModel.LogDirectory):
+                _mainViewModel.TimeTrackingService.TimeLogService.UpdateLogDirectory(_viewModel.LogDirectory);
                 SaveSettings();
                 break;
             case nameof(SettingsViewModel.TopmostEnforcementIntervalSeconds):
@@ -119,62 +114,43 @@ public partial class SettingsWindow : Window
         var mainWindowBottom = mainWindowTop + _mainWindow.ActualHeight;
         var mainWindowRight = mainWindowLeft + _mainWindow.ActualWidth;
 
-        // Try to position above first
         if (mainWindowTop - Height >= workArea.Top)
         {
-            // Fits above
             Top = mainWindowTop - Height;
         }
         else if (mainWindowBottom + Height <= workArea.Bottom)
         {
-            // Fits below
             Top = mainWindowBottom;
         }
         else
         {
-            // Doesn't fit either way, position below
             Top = mainWindowBottom;
         }
 
-        // Try to align left edge with main window
         if (mainWindowLeft + Width <= workArea.Right)
         {
-            // Fits aligned to left edge
             Left = mainWindowLeft;
         }
         else if (mainWindowRight - Width >= workArea.Left)
         {
-            // Align to right edge of main window
             Left = mainWindowRight - Width;
         }
         else
         {
-            // Center on screen
             Left = (workArea.Width - Width) / 2 + workArea.Left;
         }
 
-        // Ensure window is fully on screen
         if (Left < workArea.Left) Left = workArea.Left;
         if (Left + Width > workArea.Right) Left = workArea.Right - Width;
         if (Top < workArea.Top) Top = workArea.Top;
         if (Top + Height > workArea.Bottom) Top = workArea.Bottom - Height;
     }
 
-    private void MinimizeButton_Click(object sender, RoutedEventArgs e)
+    private void Minimize()
     {
         if (_isClosing) return;
         _isClosing = true;
         Close();
-    }
-
-    private void CloseButton_Click(object sender, RoutedEventArgs e)
-    {
-        ConfirmationOverlay.Visibility = Visibility.Visible;
-    }
-
-    private void ConfirmationOverlay_Confirmed(object? sender, EventArgs e)
-    {
-        WpfApplication.Current.Shutdown();
     }
 
     private void ConfirmationOverlay_Cancelled(object? sender, EventArgs e)
@@ -189,10 +165,8 @@ public partial class SettingsWindow : Window
         {
             _isShowingDialog = true;
 
-            // Use Windows Forms ColorDialog for simplicity
             using var colorDialog = new FormsColorDialog();
 
-            // Set current color
             if (_viewModel.CustomBackgroundColor.HasValue)
             {
                 var wpfColor = _viewModel.CustomBackgroundColor.Value;
@@ -201,7 +175,6 @@ public partial class SettingsWindow : Window
 
             colorDialog.FullOpen = true;
 
-            // Create Forms-compatible window handle
             var helper = new System.Windows.Interop.WindowInteropHelper(this);
             var owner = System.Windows.Forms.Control.FromHandle(helper.Handle);
 
@@ -218,12 +191,6 @@ public partial class SettingsWindow : Window
         {
             _isShowingDialog = false;
         }
-    }
-
-    private void ResetColor()
-    {
-        _viewModel.CustomBackgroundColor = null;
-        SaveSettings();
     }
 
     private void BrowseLogDirectory()
@@ -255,121 +222,124 @@ public partial class SettingsWindow : Window
         }
     }
 
-	private void SaveSettings()
-	{
-		try
-		{
-			var settings = Properties.Settings.Default;
+    private void OpenTimeLog()
+    {
+        try
+        {
+            _isShowingDialog = true;
 
-			// Save custom background color
-			_mainViewModel.CustomBackgroundColor = _viewModel.CustomBackgroundColor;
-			if (_viewModel.CustomBackgroundColor.HasValue)
-			{
-				settings.CustomBackgroundColor = _viewModel.CustomBackgroundColor.Value.ToString();
-			}
-			else
-			{
-				settings.CustomBackgroundColor = string.Empty;
-			}
+            var timeLogService = _mainViewModel.TimeTrackingService.TimeLogService;
+            var timeLogViewModel = new TimeLogViewModel(timeLogService);
+            var timeLogWindow = new TimeLogWindow(timeLogViewModel)
+            {
+                Owner = this
+            };
+            timeLogWindow.ShowDialog();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"Failed to open time log: {ex.Message}",
+                "Error",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+        finally
+        {
+            _isShowingDialog = false;
+            Activate();
+        }
+    }
 
-			// Save window size
-			settings.MainWindowWidth = _viewModel.MainWindowWidth;
-			settings.MainWindowHeight = _viewModel.MainWindowHeight;
+    private void SaveSettings()
+    {
+        try
+        {
+            var settings = Properties.Settings.Default;
 
-			// Save log directory
-			settings.LogDirectory = _viewModel.LogDirectory ?? ".";
+            _mainViewModel.CustomBackgroundColor = _viewModel.CustomBackgroundColor;
+            if (_viewModel.CustomBackgroundColor.HasValue)
+            {
+                settings.CustomBackgroundColor = _viewModel.CustomBackgroundColor.Value.ToString();
+            }
+            else
+            {
+                settings.CustomBackgroundColor = string.Empty;
+            }
 
-			// Save topmost enforcement interval
-			settings.TopmostEnforcementIntervalSeconds = _viewModel.TopmostEnforcementIntervalSeconds;
+            settings.MainWindowWidth = _viewModel.MainWindowWidth;
+            settings.MainWindowHeight = _viewModel.MainWindowHeight;
+            settings.LogDirectory = _viewModel.LogDirectory ?? ".";
+            settings.TopmostEnforcementIntervalSeconds = _viewModel.TopmostEnforcementIntervalSeconds;
 
-			// Sync timezones back to MainWindowViewModel
-			_mainViewModel.Timezones.Clear();
-			foreach (var tz in _viewModel.Timezones)
-			{
-				_mainViewModel.Timezones.Add(tz);
-			}
+            _mainViewModel.Timezones.Clear();
+            foreach (var tz in _viewModel.Timezones)
+            {
+                _mainViewModel.Timezones.Add(tz);
+            }
 
-			// Save timezones
-			if (_mainViewModel.Timezones.Count > 0)
-			{
-				settings.TimezonesJson = System.Text.Json.JsonSerializer.Serialize(_mainViewModel.Timezones.ToList());
-			}
+            if (_mainViewModel.Timezones.Count > 0)
+            {
+                settings.TimezonesJson = System.Text.Json.JsonSerializer.Serialize(_mainViewModel.Timezones.ToList());
+            }
 
-			settings.Save();
+            settings.Save();
+            _mainViewModel.UpdateTimes();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Failed to save settings: {ex.Message}");
+        }
+    }
 
-			// Update main window display (ViewModel handles this automatically via property changes)
-			_mainViewModel.UpdateTimes();
-		}
-		catch (Exception ex)
-		{
-			System.Diagnostics.Debug.WriteLine($"Failed to save settings: {ex.Message}");
-		}
-	}
+    private void AddTimezone()
+    {
+        try
+        {
+            _isShowingDialog = true;
 
-	private void AddTimezone()
-	{
-		try
-		{
-			_isShowingDialog = true;
+            var dialog = new XAML.TimezonePickerDialog
+            {
+                Owner = this
+            };
 
-			var dialog = new XAML.TimezonePickerDialog
-			{
-				Owner = this
-			};
+            var result = dialog.ShowDialog();
 
-			var result = dialog.ShowDialog();
+            if (result == true && dialog.SelectedTimezone != null)
+            {
+                _viewModel.Timezones.Add(new TimezoneEntry
+                {
+                    Caption = dialog.TimezoneCaption,
+                    TimeZoneId = dialog.SelectedTimezone.Id
+                });
 
-			if (result == true && dialog.SelectedTimezone != null)
-			{
-				_viewModel.Timezones.Add(new TimezoneEntry
-				{
-					Caption = dialog.TimezoneCaption,
-					TimeZoneId = dialog.SelectedTimezone.Id
-				});
-
-				SaveSettings();
-			}
-		}
-		catch (Exception ex)
-		{
-			System.Diagnostics.Debug.WriteLine($"Failed to add timezone: {ex.Message}");
-		}
-		finally
-		{
-			_isShowingDialog = false;
-			Activate();
-		}
-	}
-
-	private void RemoveTimezone(TimezoneEntry entry)
-	{
-		try
-		{
-			_viewModel.Timezones.Remove(entry);
-			SaveSettings();
-		}
-		catch (Exception ex)
-		{
-			System.Diagnostics.Debug.WriteLine($"Failed to remove timezone: {ex.Message}");
-		}
-	}
+                SaveSettings();
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Failed to add timezone: {ex.Message}");
+        }
+        finally
+        {
+            _isShowingDialog = false;
+            Activate();
+        }
+    }
 
     private void UpdateJiraUIState()
     {
-        _viewModel.IsJiraConnected = _mainViewModel.JiraService.IsAuthenticated;
-        _viewModel.JiraStatusText = _mainViewModel.JiraService.IsAuthenticated
-            ? "Connected to Jira"
-            : "Not connected";
+        var isConnected = _mainViewModel.JiraService.IsAuthenticated;
+        _viewModel.IsJiraConnected = isConnected;
+        _viewModel.JiraStatusText = isConnected ? "Connected to Jira" : "Not connected";
     }
 
     private async void ConnectJira()
     {
         try
         {
-            // Check if credentials are already stored
             if (!_mainViewModel.JiraService.HasCredentials)
             {
-                // Show credentials overlay
                 var settings = Properties.Settings.Default;
                 JiraCredentialsOverlay.SetCredentials(
                     settings.JiraClientId ?? "",
@@ -378,7 +348,6 @@ public partial class SettingsWindow : Window
                 return;
             }
 
-            // Credentials exist, proceed with authentication
             await StartJiraAuthenticationFlow();
         }
         catch (Exception ex)
@@ -414,14 +383,8 @@ public partial class SettingsWindow : Window
     private async void JiraCredentialsOverlay_CredentialsSubmitted(object? sender, (string ClientId, string ClientSecret) credentials)
     {
         JiraCredentialsOverlay.Visibility = Visibility.Collapsed;
-
-        // Save credentials
         _mainViewModel.JiraService.SetCredentials(credentials.ClientId, credentials.ClientSecret);
-
-        // Start authentication flow
         await StartJiraAuthenticationFlow();
-
-        // Re-activate window after auth flow completes
         Activate();
     }
 
@@ -431,24 +394,12 @@ public partial class SettingsWindow : Window
         Activate();
     }
 
-    private async void DisconnectJira()
-    {
-        try
-        {
-            _viewModel.JiraStatusText = "Disconnecting...";
-            await _mainViewModel.JiraService.DisconnectAsync();
-        }
-        catch (Exception ex)
-        {
-            _viewModel.JiraStatusText = $"Error: {ex.Message}";
-        }
-    }
-
     private void JiraService_AuthenticationCompleted(object? sender, string message)
     {
         Dispatcher.Invoke(() =>
         {
             UpdateJiraUIState();
+            Activate();
         });
     }
 
@@ -479,32 +430,68 @@ public partial class SettingsWindow : Window
         }
     }
 
-	private void Window_Deactivated(object? sender, EventArgs e)
+    private void Window_Deactivated(object? sender, EventArgs e)
     {
-        // Don't auto-hide if already closing
         if (_isClosing)
             return;
 
-        // Don't auto-hide if confirmation overlay is visible
         if (ConfirmationOverlay.Visibility == Visibility.Visible)
             return;
 
-        // Don't auto-hide if Jira credentials overlay is visible
         if (JiraCredentialsOverlay.Visibility == Visibility.Visible)
             return;
 
-        // Don't auto-hide if showing a dialog (color picker, etc.)
         if (_isShowingDialog)
             return;
 
-        // Auto-hide when clicking outside (context menu behavior)
         _isClosing = true;
         Close();
     }
 
+    private void JiraIcon_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (_viewModel.IsJiraConnected)
+        {
+            ConfirmationOverlay.SetMessage("Disconnect from Jira?", "You will need to reconnect to log time to Jira issues.", "Disconnect");
+            ConfirmationOverlay.Tag = "DisconnectJira";
+            ConfirmationOverlay.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            ConnectJira();
+        }
+    }
+
+    private void DeelIcon_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        _isShowingDialog = true;
+
+        var service = DeelEmbeddedBrowserService.Instance;
+        service.OpenBrowserWindow();
+
+        _viewModel.IsDeelConnected = service.IsAuthenticated;
+    }
+
+    private void ConfirmationOverlay_Confirmed(object? sender, EventArgs e)
+    {
+        var tag = ConfirmationOverlay.Tag as string;
+        ConfirmationOverlay.Visibility = Visibility.Collapsed;
+        ConfirmationOverlay.ResetToDefault();
+
+        if (tag == "DisconnectJira")
+        {
+            _ = _mainViewModel.JiraService.DisconnectAsync();
+            UpdateJiraUIState();
+            ConfirmationOverlay.Tag = null;
+        }
+        else
+        {
+            WpfApplication.Current.Shutdown();
+        }
+    }
+
     protected override void OnClosed(EventArgs e)
     {
-        // Unsubscribe from events to prevent crashes when reopening
         _mainViewModel.JiraService.AuthenticationCompleted -= JiraService_AuthenticationCompleted;
         _mainViewModel.JiraService.AuthenticationFailed -= JiraService_AuthenticationFailed;
         _mainViewModel.JiraService.Disconnected -= JiraService_Disconnected;

@@ -65,6 +65,7 @@ public static class Constants
     public static class UI
     {
         public static int DragThresholdPixels => 4;
+        public static string NothingFound => "Nothing found";
     }
 
     public static class Timeouts
@@ -122,5 +123,25 @@ public static class Constants
         public static TimeSpan MinimumTimeInternalMode => TimeSpan.FromMinutes(2);
         public static string WindowLogFile => "upwork.window.log";
         public static string TimeLogFile => "upwork.time.log";
+    }
+
+    public static class Deel
+    {
+        public static string ContractsUrl => "/time-attendance/contracts";
+        public static string BaseUrl => "https://app.deel.com";
+
+        public static class Timeouts
+        {
+            public static TimeSpan BrowserInitialization => TimeSpan.FromSeconds(30);
+            public static TimeSpan ElementTimeout => TimeSpan.FromSeconds(10);
+            public static TimeSpan PageSettleDownWait => TimeSpan.FromSeconds(5);
+            public static TimeSpan ClientsideActionWait => TimeSpan.FromMilliseconds(500);
+            public static TimeSpan ProfileCheckInterval => TimeSpan.FromMilliseconds(500);
+        }
+
+        public static class Selectors
+        {
+            public static string ProfileElement => "div.MuiBox-root[aria-label='Profile']";
+        }
     }
 }

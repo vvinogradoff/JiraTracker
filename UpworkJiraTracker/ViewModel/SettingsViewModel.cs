@@ -12,9 +12,11 @@ namespace UpworkJiraTracker.ViewModel;
 
 public class SettingsViewModel : INotifyPropertyChanged
 {
+    private readonly MainWindowViewModel _mainViewModel;
     private WpfColor? _customBackgroundColor;
     private string _jiraStatusText = "Not connected";
     private bool _isJiraConnected = false;
+    private bool _isDeelConnected = false;
     private UpworkState _upworkState = UpworkState.NoProcess;
     private double _mainWindowWidth = 180;
     private double _mainWindowHeight = 48;
@@ -23,41 +25,88 @@ public class SettingsViewModel : INotifyPropertyChanged
 
     public event PropertyChangedEventHandler? PropertyChanged;
     public event EventHandler? PickColorRequested;
-    public event EventHandler? ResetColorRequested;
     public event EventHandler? CloseRequested;
     public event EventHandler? AddTimezoneRequested;
-    public event EventHandler<TimezoneEntry>? RemoveTimezoneRequested;
     public event EventHandler? ConnectJiraRequested;
-    public event EventHandler? DisconnectJiraRequested;
     public event EventHandler? BrowseLogDirectoryRequested;
+    public event EventHandler? OpenTimeLogRequested;
+    public event EventHandler? MinimizeRequested;
 
     public ICommand PickColorCommand { get; }
     public ICommand ResetColorCommand { get; }
+    public ICommand TransparentColorCommand { get; }
     public ICommand CloseCommand { get; }
+    public ICommand MinimizeCommand { get; }
     public ICommand AddTimezoneCommand { get; }
     public ICommand RemoveTimezoneCommand { get; }
     public ICommand ConnectJiraCommand { get; }
     public ICommand DisconnectJiraCommand { get; }
+    public ICommand ToggleJiraConnectionCommand { get; }
     public ICommand BrowseLogDirectoryCommand { get; }
+    public ICommand OpenTimeLogCommand { get; }
 
     public ObservableCollection<TimezoneEntry> Timezones { get; } = new();
 
-    public SettingsViewModel()
+	[Obsolete("For design-time only", true)]
+	public SettingsViewModel() { }
+
+    public SettingsViewModel(MainWindowViewModel mainViewModel)
     {
+        _mainViewModel = mainViewModel;
+
         PickColorCommand = new RelayCommand(_ => PickColorRequested?.Invoke(this, EventArgs.Empty));
-        ResetColorCommand = new RelayCommand(_ => ResetColorRequested?.Invoke(this, EventArgs.Empty));
+        ResetColorCommand = new RelayCommand(_ => ResetColor());
+        TransparentColorCommand = new RelayCommand(_ => SetTransparentColor());
         CloseCommand = new RelayCommand(_ => CloseRequested?.Invoke(this, EventArgs.Empty));
+        MinimizeCommand = new RelayCommand(_ => MinimizeRequested?.Invoke(this, EventArgs.Empty));
         AddTimezoneCommand = new RelayCommand(_ => AddTimezoneRequested?.Invoke(this, EventArgs.Empty));
         RemoveTimezoneCommand = new RelayCommand(param =>
         {
             if (param is TimezoneEntry entry)
             {
-                RemoveTimezoneRequested?.Invoke(this, entry);
+                Timezones.Remove(entry);
             }
         });
         ConnectJiraCommand = new RelayCommand(_ => ConnectJiraRequested?.Invoke(this, EventArgs.Empty));
-        DisconnectJiraCommand = new RelayCommand(_ => DisconnectJiraRequested?.Invoke(this, EventArgs.Empty));
+        DisconnectJiraCommand = new RelayCommand(async _ => await DisconnectJiraAsync());
+        ToggleJiraConnectionCommand = new RelayCommand(async _ => await ToggleJiraConnectionAsync());
         BrowseLogDirectoryCommand = new RelayCommand(_ => BrowseLogDirectoryRequested?.Invoke(this, EventArgs.Empty));
+        OpenTimeLogCommand = new RelayCommand(_ => OpenTimeLogRequested?.Invoke(this, EventArgs.Empty));
+    }
+
+    private void ResetColor()
+    {
+        CustomBackgroundColor = null;
+    }
+
+    private void SetTransparentColor()
+    {
+        CustomBackgroundColor = System.Windows.Media.Color.FromArgb(0, 0, 0, 0);
+    }
+
+    private async Task DisconnectJiraAsync()
+    {
+        try
+        {
+            JiraStatusText = "Disconnecting...";
+            await _mainViewModel.JiraService.DisconnectAsync();
+        }
+        catch (Exception ex)
+        {
+            JiraStatusText = $"Error: {ex.Message}";
+        }
+    }
+
+    private async Task ToggleJiraConnectionAsync()
+    {
+        if (IsJiraConnected)
+        {
+            await DisconnectJiraAsync();
+        }
+        else
+        {
+            ConnectJiraRequested?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     public string JiraStatusText
@@ -94,6 +143,19 @@ public class SettingsViewModel : INotifyPropertyChanged
             if (_isJiraConnected != value)
             {
                 _isJiraConnected = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public bool IsDeelConnected
+    {
+        get => _isDeelConnected;
+        set
+        {
+            if (_isDeelConnected != value)
+            {
+                _isDeelConnected = value;
                 OnPropertyChanged();
             }
         }

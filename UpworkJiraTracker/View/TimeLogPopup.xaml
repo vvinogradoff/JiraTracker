@@ -1,0 +1,36 @@
+<Window x:Class="UpworkJiraTracker.View.TimeLogPopup"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:UpworkJiraTracker.View"
+        xmlns:vm="clr-namespace:UpworkJiraTracker.ViewModel"
+        mc:Ignorable="d"
+        Title="Time Log"
+        Height="400"
+        Width="380"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        Deactivated="Window_Deactivated"
+        d:DataContext="{d:DesignInstance Type=vm:TimeLogViewModel, IsDesignTimeCreatable=False}">
+
+    <Border Background="White"
+            BorderBrush="#CCCCCC"
+            BorderThickness="1"
+            CornerRadius="4"
+            Padding="12">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="10"
+                              ShadowDepth="2"
+                              Opacity="0.3"
+                              Color="Black"/>
+        </Border.Effect>
+
+        <!-- Time log control -->
+        <local:TimeLogControl DataContext="{Binding}"/>
+    </Border>
+</Window>

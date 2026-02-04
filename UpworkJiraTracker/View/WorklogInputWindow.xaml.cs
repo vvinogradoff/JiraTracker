@@ -1,10 +1,13 @@
 using System.Windows;
 using System.Windows.Input;
+using UpworkJiraTracker.ViewModel;
 
 namespace UpworkJiraTracker.View;
 
 public partial class WorklogInputWindow : Window
 {
+    private readonly WorklogInputViewModel _viewModel;
+
     /// <summary>
     /// Result indicating whether user submitted values or cancelled.
     /// </summary>
@@ -23,6 +26,12 @@ public partial class WorklogInputWindow : Window
     public WorklogInputWindow()
     {
         InitializeComponent();
+
+        _viewModel = new WorklogInputViewModel();
+        DataContext = _viewModel;
+
+        _viewModel.SubmitRequested += OnSubmitRequested;
+        _viewModel.CancelRequested += OnCancelRequested;
     }
 
     /// <summary>
@@ -70,43 +79,29 @@ public partial class WorklogInputWindow : Window
     {
         if (e.Key == Key.Escape)
         {
-            // Cancel - don't submit values
-            Submitted = false;
-            WorkDescription = string.Empty;
-            RemainingEstimateHours = null;
-            Close();
+            _viewModel.CancelCommand.Execute(null);
             e.Handled = true;
         }
         else if (e.Key == Key.Enter)
         {
-            Submit();
+            _viewModel.SubmitCommand.Execute(null);
             e.Handled = true;
         }
     }
 
-    private void SubmitButton_Click(object sender, RoutedEventArgs e)
-    {
-        Submit();
-    }
-
-    private void Submit()
+    private void OnSubmitRequested(object? sender, EventArgs e)
     {
         Submitted = true;
-        WorkDescription = DescriptionTextBox.Text?.Trim() ?? string.Empty;
+        WorkDescription = _viewModel.WorkDescription;
+        RemainingEstimateHours = _viewModel.RemainingEstimateHours;
+        Close();
+    }
 
-        // Parse ETA
-        var etaText = EtaTextBox.Text?.Trim();
-        if (!string.IsNullOrEmpty(etaText))
-        {
-            // Try parsing as decimal hours (e.g., "2.5" or "2,5")
-            etaText = etaText.Replace(',', '.');
-            if (double.TryParse(etaText, System.Globalization.NumberStyles.Any,
-                System.Globalization.CultureInfo.InvariantCulture, out var hours) && hours >= 0)
-            {
-                RemainingEstimateHours = hours;
-            }
-        }
-
+    private void OnCancelRequested(object? sender, EventArgs e)
+    {
+        Submitted = false;
+        WorkDescription = string.Empty;
+        RemainingEstimateHours = null;
         Close();
     }
 }

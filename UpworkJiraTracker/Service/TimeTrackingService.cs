@@ -2,10 +2,15 @@ using UpworkJiraTracker.Model;
 
 namespace UpworkJiraTracker.Service;
 
+/// <summary>
+/// Service for tracking time and logging to integrations (Jira, Deel, local file).
+/// Coordinates sequential calls to all integrations when time is logged.
+/// </summary>
 public class TimeTrackingService
 {
     private readonly JiraIssuesService _jiraIssuesService;
     private readonly TimeLogService _timeLogService;
+    private readonly DeelAutomationService _deelService;
 
     // Issue cache for looking up issue details by key
     private readonly Dictionary<string, IssueDetails> _issueCache = new();
@@ -42,13 +47,18 @@ public class TimeTrackingService
     /// </summary>
     public TimeSpan BaseWeeklyTotal => _baseWeeklyTotal;
 
+    /// <summary>
+    /// Access to the time log service for getting file paths
+    /// </summary>
+    public TimeLogService TimeLogService => _timeLogService;
+
     public event EventHandler<WorklogResult>? TimeLogged;
 
     public TimeTrackingService(JiraIssuesService jiraIssuesService)
     {
         _jiraIssuesService = jiraIssuesService;
         _timeLogService = new TimeLogService();
-        _jiraIssuesService.WorklogCompleted += OnWorklogCompleted;
+        _deelService = new DeelAutomationService();
     }
 
     /// <summary>
@@ -93,19 +103,108 @@ public class TimeTrackingService
         System.Diagnostics.Debug.WriteLine($"Weekly total updated: {previousTotal} -> {newWeeklyTotal} (diff: {timeDiff}, total accumulated: {totalAccumulated})");
     }
 
-    private void OnWorklogCompleted(object? sender, WorklogResult result)
+    /// <summary>
+    /// Logs time to all integrations sequentially: Jira, local file, then Deel.
+    /// </summary>
+    private async Task LogTimeToAllIntegrationsAsync(
+        IssueDetails issue,
+        TimeSpan timeSpent,
+        string? comment = null,
+        double? remainingEstimateHours = null)
     {
-        TimeLogged?.Invoke(this, result);
+        System.Diagnostics.Debug.WriteLine($"[TimeTrackingService] Logging {timeSpent} for {issue.Key}");
 
-        // Log time entry to file
-        if (result.Success && _currentIssue != null)
+        // 1. Log to Jira
+        var jiraSuccess = await _jiraIssuesService.LogTimeAsync(
+            issue.Key,
+            timeSpent,
+            comment,
+            remainingEstimateHours,
+            issue.Summary);
+
+        var result = new WorklogResult
         {
-            _timeLogService.LogTime(
-                _currentIssue.Key,
-                _currentIssue.Summary,
-                _currentIssue.Assignee,
-                _currentIssue.Status,
-                result.TimeLogged);
+            Success = jiraSuccess,
+            IssueKey = issue.Key,
+            TimeLogged = timeSpent,
+            ErrorMessage = jiraSuccess ? null : "Failed to log time to Jira",
+            Comment = comment,
+            IssueSummary = issue.Summary,
+            RemainingEstimateHours = remainingEstimateHours
+        };
+
+        // 2. Log to local file (always, regardless of Jira result)
+        _timeLogService.LogTime(
+            issue.Key,
+            issue.Summary,
+            issue.Assignee,
+            issue.Status,
+            timeSpent,
+            comment,
+            remainingEstimateHours);
+
+        // 3. Log to Deel (always, regardless of Jira result)
+        await LogToDeelAsync(issue.Key, issue.Summary, timeSpent, comment);
+
+        // 4. Notify listeners
+        TimeLogged?.Invoke(this, result);
+    }
+
+    /// <summary>
+    /// Logs time to Deel integration.
+    /// </summary>
+    private async Task LogToDeelAsync(string issueKey, string? issueSummary, TimeSpan timeSpent, string? comment)
+    {
+        try
+        {
+            // Format description: "<issueKey>. <comment>" or "<issueKey>. <summary>"
+            var description = !string.IsNullOrWhiteSpace(comment)
+                ? $"{issueKey}. {comment}"
+                : $"{issueKey}. {issueSummary ?? "No description"}";
+
+            // Round to nearest 10 minutes
+            var totalMinutes = (int)timeSpent.TotalMinutes;
+            var roundedMinutes = (int)Math.Round(totalMinutes / 10.0) * 10;
+
+            // Don't log if less than 5 minutes (rounds to 0)
+            if (roundedMinutes == 0)
+            {
+                System.Diagnostics.Debug.WriteLine($"[TimeTrackingService] Skipping Deel logging: {totalMinutes} minutes rounds to 0");
+                return;
+            }
+
+            var hours = roundedMinutes / 60;
+            var minutes = roundedMinutes % 60;
+
+            System.Diagnostics.Debug.WriteLine($"[TimeTrackingService] Logging to Deel: {totalMinutes}m -> {hours}h {minutes}m (rounded) - {description}");
+
+            var (success, errorMessage) = await _deelService.LogHoursAsync(hours, minutes, description);
+
+            if (success)
+            {
+                NotificationService.ShowSuccess(
+                    "Logged to Deel",
+                    $"{hours}h {minutes}m logged to Deel",
+                    durationMs: 3000
+                );
+            }
+            else
+            {
+                NotificationService.ShowError(
+                    "Deel Logging Failed",
+                    errorMessage ?? "Unknown error",
+                    durationMs: 5000
+                );
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[TimeTrackingService] Failed to log to Deel: {ex.Message}");
+            NotificationService.ShowError(
+                "Deel Logging Failed",
+                ex.Message,
+                durationMs: 5000
+            );
         }
     }
 
@@ -224,33 +323,24 @@ public class TimeTrackingService
         // Log switch event
         _timeLogService.LogSwitch(newIssue.Key, newIssue.Summary, newIssue.Assignee, newIssue.Status);
 
-        if (_isUpworkMode)
-        {
-            // In Upwork mode, don't log zero time
-            if (totalTime > TimeSpan.Zero)
-            {
-                await _jiraIssuesService.LogTimeAsync(_currentIssue.Key, totalTime, comment, remainingEstimateHours);
-            }
-            else
-            {
-                System.Diagnostics.Debug.WriteLine("Upwork mode: zero time, not logging to Jira");
-            }
+        // Log time to all integrations (Jira, file, Deel)
+        var shouldLog = _isUpworkMode
+            ? totalTime > TimeSpan.Zero
+            : totalTime >= Constants.TimeTracking.MinimumTimeInternalMode;
 
-            // Reset base to current for new issue
-            _baseWeeklyTotal = _currentWeeklyTotal;
+        if (shouldLog)
+        {
+            await LogTimeToAllIntegrationsAsync(_currentIssue, totalTime, comment, remainingEstimateHours);
         }
         else
         {
-            // In internal mode, don't log if less than 2 minutes
-            var minTime = Constants.TimeTracking.MinimumTimeInternalMode;
-            if (totalTime >= minTime)
-            {
-                await _jiraIssuesService.LogTimeAsync(_currentIssue.Key, totalTime, comment, remainingEstimateHours);
-            }
-            else
-            {
-                System.Diagnostics.Debug.WriteLine($"Internal mode: {totalTime} < {minTime}, not logging to Jira");
-            }
+            System.Diagnostics.Debug.WriteLine($"Time {totalTime} below minimum threshold, not logging");
+        }
+
+        // Reset base in Upwork mode
+        if (_isUpworkMode)
+        {
+            _baseWeeklyTotal = _currentWeeklyTotal;
         }
 
         // Reset for new issue
@@ -260,7 +350,7 @@ public class TimeTrackingService
     }
 
     /// <summary>
-    /// Stop tracking. Logs time as-is without rounding.
+    /// Stop tracking. Logs time to all integrations (Jira, file, Deel).
     /// </summary>
     public async Task StopAsync(string? comment = null, double? remainingEstimateHours = null)
     {
@@ -287,31 +377,18 @@ public class TimeTrackingService
 
         System.Diagnostics.Debug.WriteLine($"Stop tracking: Total time: {totalTime}");
 
-        // Check minimum time thresholds before logging
-        if (_isUpworkMode)
+        // Log time to all integrations (Jira, file, Deel)
+        var shouldLog = _isUpworkMode
+            ? totalTime > TimeSpan.Zero
+            : totalTime >= Constants.TimeTracking.MinimumTimeInternalMode;
+
+        if (shouldLog)
         {
-            // In Upwork mode, don't log zero time
-            if (totalTime > TimeSpan.Zero)
-            {
-                await _jiraIssuesService.LogTimeAsync(_currentIssue.Key, totalTime, comment, remainingEstimateHours);
-            }
-            else
-            {
-                System.Diagnostics.Debug.WriteLine("Upwork mode: zero time, not logging to Jira");
-            }
+            await LogTimeToAllIntegrationsAsync(_currentIssue, totalTime, comment, remainingEstimateHours);
         }
         else
         {
-            // In internal mode, don't log if less than 2 minutes
-            var minTime = Constants.TimeTracking.MinimumTimeInternalMode;
-            if (totalTime >= minTime)
-            {
-                await _jiraIssuesService.LogTimeAsync(_currentIssue.Key, totalTime, comment, remainingEstimateHours);
-            }
-            else
-            {
-                System.Diagnostics.Debug.WriteLine($"Internal mode: {totalTime} < {minTime}, not logging to Jira");
-            }
+            System.Diagnostics.Debug.WriteLine($"Time {totalTime} below minimum threshold, not logging");
         }
 
         // Reset state
@@ -332,5 +409,17 @@ public class TimeTrackingService
             return TimeSpan.Zero;
 
         return DateTime.UtcNow - _trackingStartedAtUtc;
+    }
+
+    /// <summary>
+    /// Cleanup resources including Deel browser
+    /// </summary>
+    public async Task CleanupAsync()
+    {
+        if (_deelService != null)
+        {
+            System.Diagnostics.Debug.WriteLine("[TimeTrackingService] Closing Deel browser...");
+            await _deelService.CloseAsync();
+        }
     }
 }

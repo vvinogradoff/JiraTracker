@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:UpworkJiraTracker.ViewModel"
         mc:Ignorable="d"
         Title="Log Work"
         Width="350"
@@ -14,7 +15,8 @@
         ShowInTaskbar="False"
         ResizeMode="NoResize"
         Loaded="Window_Loaded"
-        PreviewKeyDown="Window_PreviewKeyDown">
+        PreviewKeyDown="Window_PreviewKeyDown"
+		d:DataContext="{d:DesignInstance Type=vm:WorklogInputViewModel, IsDesignTimeCreatable=True}">
 
     <Border Background="White"
             BorderBrush="#CCCCCC"
@@ -38,6 +40,7 @@
             <!-- Description field -->
             <TextBox x:Name="DescriptionTextBox"
                      Grid.Column="0"
+                     Text="{Binding WorkDescription, UpdateSourceTrigger=PropertyChanged}"
                      Style="{StaticResource FlatTextBoxStyle}"
                      ToolTip="Describe the progress (optional)"
                      Margin="0,0,8,0"/>
@@ -45,6 +48,7 @@
             <!-- ETA field -->
             <TextBox x:Name="EtaTextBox"
                      Grid.Column="1"
+                     Text="{Binding EtaText, UpdateSourceTrigger=PropertyChanged}"
                      Style="{StaticResource FlatTextBoxStyle}"
                      ToolTip="Remaining estimate in hours (optional)"
                      Margin="0,0,8,0"/>
@@ -57,7 +61,7 @@
                     Height="22"
                     Style="{StaticResource PrimaryButtonStyle}"
                     Padding="8,2"
-                    Click="SubmitButton_Click"/>
+                    Command="{Binding SubmitCommand}"/>
         </Grid>
     </Border>
 </Window>

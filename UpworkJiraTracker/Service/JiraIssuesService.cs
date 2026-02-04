@@ -188,7 +188,7 @@ public class JiraIssuesService
     /// Searches issues from cache instantly. Returns results without debounce.
     /// Call this when cache has issues (HasCachedIssues == true).
     /// </summary>
-    public void SearchFromCache(string text)
+    public bool SearchFromCache(string text)
     {
         if (string.IsNullOrWhiteSpace(text))
         {
@@ -202,7 +202,7 @@ public class JiraIssuesService
                 // Trigger async load but don't await
                 _ = LoadDefaultSuggestionsAsync();
             }
-            return;
+			return true;
         }
 
         var results = _cacheService.Search(text);
@@ -215,19 +215,20 @@ public class JiraIssuesService
                 new JiraIssue
                 {
                     Key = "",
-                    Summary = "Nothing found",
+                    Summary = Constants.UI.NothingFound,
                     IsSectionHeader = true,
                     Status = "",
                     Assignee = "",
                     Reporter = ""
                 }
             };
-            SuggestionsUpdated?.Invoke(this, new SuggestionsUpdatedEventArgs(results, isCached: false));
-            return;
+            SuggestionsUpdated?.Invoke(this, new SuggestionsUpdatedEventArgs(results, isCached: true));
+            return false;
         }
 
         // Results from cache - mark as cached
         SuggestionsUpdated?.Invoke(this, new SuggestionsUpdatedEventArgs(results, isCached: true));
+		return true;
     }
 
     /// <summary>
@@ -278,7 +279,7 @@ public class JiraIssuesService
                     new JiraIssue
                     {
                         Key = "",
-                        Summary = "Nothing found",
+                        Summary = Constants.UI.NothingFound,
                         IsSectionHeader = true,
                         Status = "",
                         Assignee = "",
@@ -298,7 +299,7 @@ public class JiraIssuesService
                 new JiraIssue
                 {
                     Key = "",
-                    Summary = "Nothing found",
+                    Summary = Constants.UI.NothingFound,
                     IsSectionHeader = true,
                     Status = "",
                     Assignee = "",
@@ -324,7 +325,7 @@ public class JiraIssuesService
         _cachedDefaultSuggestions = null;
     }
 
-    public async Task<bool> LogTimeAsync(string issueKey, TimeSpan timeSpent, string? comment = null, double? remainingEstimateHours = null)
+    public async Task<bool> LogTimeAsync(string issueKey, TimeSpan timeSpent, string? comment = null, double? remainingEstimateHours = null, string? issueSummary = null)
     {
         if (!_authService.IsAuthenticated || string.IsNullOrEmpty(_authService.CloudId))
         {
@@ -332,7 +333,9 @@ public class JiraIssuesService
             {
                 Success = false,
                 IssueKey = issueKey,
-                ErrorMessage = "Not authenticated"
+                ErrorMessage = "Not authenticated",
+                Comment = comment,
+                IssueSummary = issueSummary
             });
             return false;
         }
@@ -416,7 +419,10 @@ public class JiraIssuesService
             Success = success,
             IssueKey = issueKey,
             TimeLogged = timeSpent,
-            ErrorMessage = success ? null : "Failed to log time"
+            ErrorMessage = success ? null : "Failed to log time",
+            Comment = comment,
+            IssueSummary = issueSummary,
+            RemainingEstimateHours = remainingEstimateHours
         };
 
         WorklogCompleted?.Invoke(this, result);

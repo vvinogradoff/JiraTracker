@@ -48,11 +48,14 @@
                     <TextBlock Text="Caption:"
                               Style="{StaticResource StyleDialogLabel}"/>
                     <TextBox x:Name="CaptionTextBox"
+                            Text="{Binding TimezoneCaption, UpdateSourceTrigger=PropertyChanged}"
                             Style="{StaticResource StyleDialogInput}"/>
 
                     <TextBlock Text="Timezone:"
                               Style="{StaticResource StyleDialogLabel}"/>
                     <ComboBox x:Name="TimezoneComboBox"
+                             ItemsSource="{Binding Timezones}"
+                             SelectedItem="{Binding SelectedTimezone}"
                              DisplayMemberPath="DisplayName"
                              Style="{StaticResource StyleDialogComboBox}"/>
                 </StackPanel>
@@ -74,16 +77,14 @@
                         <Button Grid.Column="1"
                                Content="Cancel"
                                Width="70"
-                               Height="28"
                                Margin="0,0,8,0"
-                               Click="Cancel_Click"
+                               Command="{Binding CancelCommand}"
                                Style="{StaticResource SecondaryButtonStyle}"/>
 
                         <Button Grid.Column="2"
                                Content="Add"
                                Width="70"
-                               Height="28"
-                               Click="Add_Click"
+                               Command="{Binding AddCommand}"
                                Style="{StaticResource SecondaryButtonStyle}"/>
                     </Grid>
                 </Border>

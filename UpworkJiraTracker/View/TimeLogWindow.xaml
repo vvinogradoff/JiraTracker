@@ -1,0 +1,58 @@
+<Window x:Class="UpworkJiraTracker.View.TimeLogWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:UpworkJiraTracker.View"
+        xmlns:vm="clr-namespace:UpworkJiraTracker.ViewModel"
+        mc:Ignorable="d"
+        Title="Time Log"
+        Height="500"
+        Width="400"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="CanResize"
+        d:DataContext="{d:DesignInstance Type=vm:TimeLogViewModel, IsDesignTimeCreatable=False}">
+
+    <Border Background="White"
+            BorderBrush="#CCCCCC"
+            BorderThickness="1"
+            CornerRadius="4"
+            Padding="16">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="10"
+                              ShadowDepth="2"
+                              Opacity="0.3"
+                              Color="Black"/>
+        </Border.Effect>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Title bar with close button -->
+            <Grid Grid.Row="0" Margin="0,0,0,12">
+                <TextBlock Text="Time Log"
+                          FontSize="14"
+                          FontWeight="SemiBold"
+                          VerticalAlignment="Center"/>
+                <Button Content="✕"
+                        HorizontalAlignment="Right"
+                        Width="24"
+                        Height="24"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        FontSize="14"
+                        Cursor="Hand"
+                        Click="CloseButton_Click"/>
+            </Grid>
+
+            <!-- Time log control -->
+            <local:TimeLogControl Grid.Row="1"
+                                 DataContext="{Binding}"/>
+        </Grid>
+    </Border>
+</Window>

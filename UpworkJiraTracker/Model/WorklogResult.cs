@@ -6,4 +6,7 @@ public class WorklogResult
 	public string IssueKey { get; set; } = "";
 	public TimeSpan TimeLogged { get; set; }
 	public string? ErrorMessage { get; set; }
+	public string? Comment { get; set; }
+	public string? IssueSummary { get; set; }
+	public double? RemainingEstimateHours { get; set; }
 }

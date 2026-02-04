@@ -5,6 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:UpworkJiraTracker.XAML"
         xmlns:converters="clr-namespace:UpworkJiraTracker.XAML.Converter"
+        xmlns:vm="clr-namespace:UpworkJiraTracker.ViewModel"
         mc:Ignorable="d"
         Title="UpworkJiraTracker"
         Height="48"
@@ -17,7 +18,8 @@
         ResizeMode="NoResize"
         MouseDown="Window_MouseDown"
         PreviewMouseDown="Window_PreviewMouseDown"
-        Deactivated="Window_Deactivated">
+        Deactivated="Window_Deactivated"
+		d:DataContext="{d:DesignInstance Type=vm:MainWindowViewModel, IsDesignTimeCreatable=True}">
 
 	<Window.Resources>
 		<converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
@@ -70,7 +72,9 @@
                         Style="{StaticResource PlayStopButtonStyle}"
                         Command="{Binding PlayPauseCommand}"
                         IsEnabled="{Binding IsUpworkReady}"
-                        ToolTip="{Binding PlayPauseTooltip}">
+                        ToolTip="{Binding PlayPauseTooltip}"
+                        ToolTipService.Placement="Top"
+                        ToolTipService.VerticalOffset="15">
 					<Path x:Name="PlayPauseIcon"
                           Data="{Binding PlayPauseIconData}"
                           Fill="{Binding IconFillBrush}"
@@ -80,11 +84,18 @@
                           Width="20"
                           Height="20"/>
 				</Button>
-				<TextBlock Grid.Row="1" Grid.Column="0"
-						   Text="{Binding TimerTime}"
+				<!-- Timer text - Click for time log popup -->
+				<Border Grid.Row="1" Grid.Column="0"
+						Background="Transparent"
+						Cursor="Hand"
+						MouseDown="TimerArea_MouseDown"
+						MouseMove="TimerArea_MouseMove"
+						MouseUp="TimerArea_MouseUp">
+					<TextBlock Text="{Binding TimerTime}"
 						   VerticalAlignment="Center"
                            Style="{StaticResource StyleTimerText}"
                            Foreground="{Binding DataContext.ForegroundBrush, RelativeSource={RelativeSource AncestorType=Window}}"/>
+				</Border>
 
 				<!-- Upper text (arbitrary name) - Click for autocomplete -->
 				<Border Grid.Row="0" Grid.Column="1"
@@ -93,7 +104,7 @@
                             IsEnabled="{Binding IsJiraReady}"
                             ToolTip="{Binding JiraIssueTooltip}"
                             ToolTipService.Placement="Top"
-                            ToolTipService.VerticalOffset="5"
+                            ToolTipService.VerticalOffset="15"
                             MouseDown="UpperArea_MouseDown"
                             MouseMove="UpperArea_MouseMove"
                             MouseUp="UpperArea_MouseUp">
