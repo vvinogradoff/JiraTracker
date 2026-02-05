@@ -425,9 +425,6 @@ public class MainWindowViewModel : INotifyPropertyChanged
 
     private async Task InitializeTrackingModeAsync()
     {
-        // Run diagnostics first to log ALL Upwork windows (helps debug stale window issues)
-        await _upworkIntegration.DumpAllUpworkWindowsDiagnostics();
-
         // Check if Upwork is available
         if (_upworkIntegration.IsUpworkAvailable())
         {

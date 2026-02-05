@@ -123,7 +123,6 @@ public static class Constants
         /// Minimum time to log in internal timer mode (no Upwork)
         /// </summary>
         public static TimeSpan MinimumTimeInternalMode => TimeSpan.FromMinutes(2);
-        public static string WindowLogFile => "upwork.window.log";
         public static string TimeLogFile => "upwork.time.log";
     }
 

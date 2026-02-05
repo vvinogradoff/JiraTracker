@@ -1,9 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.IO;
 using System.Windows.Threading;
-using FlaUI.Core.AutomationElements;
-using FlaUI.Core.Definitions;
 using FlaUI.UIA3;
 
 using UpworkJiraTracker.Model;
@@ -13,12 +10,10 @@ namespace UpworkJiraTracker.Service;
 
 /// <summary>
 /// Monitors for new windows spawned by the Upwork process and triggers notifications.
-/// Logs all window events to upwork.window.log for analysis.
 /// </summary>
 public class UpworkWindowWatcherService : IDisposable
 {
 	private static readonly TimeSpan PollInterval = Constants.Timeouts.WindowMonitoringInterval;
-	private static readonly string LogFileName = Constants.TimeTracking.WindowLogFile;
 
 	private readonly UIA3Automation _automation;
     private readonly DispatcherTimer _pollTimer;
@@ -45,17 +40,9 @@ public class UpworkWindowWatcherService : IDisposable
         _isRunning = true;
         _knownWindows.Clear();
 
-        // Log all Upwork processes found
-        var processes = Process.GetProcessesByName(Constants.Upwork.ProcessName);
-        LogEvent("Watcher", $"Found {processes.Length} Upwork processes: [{string.Join(", ", processes.Select(p => $"PID={p.Id}"))}]");
-
         // Do initial scan asynchronously to avoid blocking UI thread
         // The expensive UI Automation calls will run in background
-        _ = Task.Run(() =>
-        {
-            ScanWindows(notifyNewWindows: false);
-            LogEvent("Watcher", $"Started monitoring - tracking {_knownWindows.Count} existing windows");
-        });
+        _ = Task.Run(() => ScanWindows(notifyNewWindows: false));
 
         _pollTimer.Start();
     }
@@ -66,7 +53,6 @@ public class UpworkWindowWatcherService : IDisposable
 
         _pollTimer.Stop();
         _isRunning = false;
-        LogEvent("Watcher", "Stopped monitoring Upwork windows");
     }
 
     private bool _scanInProgress = false;
@@ -104,7 +90,6 @@ public class UpworkWindowWatcherService : IDisposable
 			// Upwork not running - clear known windows
 			if (_knownWindows.Count > 0)
 			{
-				LogEvent("Watcher", "No Upwork processes found - clearing window cache");
 				_knownWindows.Clear();
 			}
 			return;
@@ -185,7 +170,6 @@ public class UpworkWindowWatcherService : IDisposable
 		catch (Exception ex)
 		{
 			Debug.WriteLine($"Error scanning windows: {ex.Message}");
-			LogEvent("Error", $"Scan failed: {ex.Message}");
 		}
 
 		// Remove windows that no longer exist
@@ -201,36 +185,6 @@ public class UpworkWindowWatcherService : IDisposable
     {
         // Raise event for external handlers
         WindowDetected?.Invoke(this, new WindowEventArgs(windowInfo, isOpen));
-    }
-
-    private void LogEvent(string eventType, string message)
-    {
-        var logDirectory = Properties.Settings.Default.LogDirectory;
-        if (string.IsNullOrWhiteSpace(logDirectory))
-            return;
-
-        try
-        {
-            var directory = logDirectory == "."
-                ? AppDomain.CurrentDomain.BaseDirectory
-                : logDirectory;
-
-            if (!Directory.Exists(directory))
-            {
-                Directory.CreateDirectory(directory);
-            }
-
-            var logPath = Path.Combine(directory, LogFileName);
-            var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
-
-            using var writer = new StreamWriter(logPath, append: true);
-            writer.WriteLine($"{timestamp} [{eventType}] {message}");
-            writer.Flush();
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"Failed to write window log: {ex.Message}");
-        }
     }
 
     public void Dispose()
