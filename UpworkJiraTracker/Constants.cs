@@ -109,6 +109,8 @@ public static class Constants
         public static string PlayIcon => "M8,5 L8,19 L19,12 Z";
         // Stroke-only square (not filled)
         public static string StopIcon => "M6,6 L18,6 L18,18 L6,18 Z";
+        // Two vertical bars for pause (stroke-only like stop icon)
+        public static string PauseIcon => "M6,5 L6,19 L10,19 L10,5 Z M14,5 L14,19 L18,19 L18,5 Z";
     }
 
     public static class TimeTracking

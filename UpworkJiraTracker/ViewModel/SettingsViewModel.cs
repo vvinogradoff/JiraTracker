@@ -23,6 +23,7 @@ public class SettingsViewModel : INotifyPropertyChanged
     private string _logDirectory = ".";
     private int _topmostEnforcementIntervalSeconds = 5;
     private bool _showDeelBrowser = true;
+    private int _pauseOnInactivityMinutes = 0;
 
     public event PropertyChangedEventHandler? PropertyChanged;
     public event EventHandler? PickColorRequested;
@@ -235,6 +236,19 @@ public class SettingsViewModel : INotifyPropertyChanged
             if (_showDeelBrowser != value)
             {
                 _showDeelBrowser = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public int PauseOnInactivityMinutes
+    {
+        get => _pauseOnInactivityMinutes;
+        set
+        {
+            if (_pauseOnInactivityMinutes != value)
+            {
+                _pauseOnInactivityMinutes = value;
                 OnPropertyChanged();
             }
         }

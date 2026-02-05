@@ -226,5 +226,17 @@ namespace UpworkJiraTracker.Properties {
                 this["ShowDeelBrowser"] = value;
             }
         }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("0")]
+        public int PauseOnInactivityMinutes {
+            get {
+                return ((int)(this["PauseOnInactivityMinutes"]));
+            }
+            set {
+                this["PauseOnInactivityMinutes"] = value;
+            }
+        }
     }
 }

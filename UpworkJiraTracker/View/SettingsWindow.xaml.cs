@@ -39,7 +39,8 @@ public partial class SettingsWindow : Window
             MainWindowHeight = _mainWindow.Height,
             LogDirectory = Properties.Settings.Default.LogDirectory ?? ".",
             TopmostEnforcementIntervalSeconds = Properties.Settings.Default.TopmostEnforcementIntervalSeconds,
-            ShowDeelBrowser = Properties.Settings.Default.ShowDeelBrowser
+            ShowDeelBrowser = Properties.Settings.Default.ShowDeelBrowser,
+            PauseOnInactivityMinutes = Properties.Settings.Default.PauseOnInactivityMinutes
         };
 
         foreach (var tz in _mainViewModel.Timezones)
@@ -94,6 +95,10 @@ public partial class SettingsWindow : Window
                 break;
             case nameof(SettingsViewModel.ShowDeelBrowser):
                 SaveSettings();
+                break;
+            case nameof(SettingsViewModel.PauseOnInactivityMinutes):
+                SaveSettings();
+                _mainViewModel.ReloadPauseOnInactivitySetting();
                 break;
         }
     }
@@ -278,6 +283,7 @@ public partial class SettingsWindow : Window
             settings.LogDirectory = _viewModel.LogDirectory ?? ".";
             settings.TopmostEnforcementIntervalSeconds = _viewModel.TopmostEnforcementIntervalSeconds;
             settings.ShowDeelBrowser = _viewModel.ShowDeelBrowser;
+            settings.PauseOnInactivityMinutes = _viewModel.PauseOnInactivityMinutes;
 
             _mainViewModel.Timezones.Clear();
             foreach (var tz in _viewModel.Timezones)
@@ -419,12 +425,7 @@ public partial class SettingsWindow : Window
     }
 
     private void JiraService_Disconnected(object? sender, EventArgs e)
-    {
-        Dispatcher.Invoke(() =>
-        {
-            UpdateJiraUIState();
-        });
-    }
+		=> Dispatcher.Invoke(UpdateJiraUIState);
 
     private void MainViewModel_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {

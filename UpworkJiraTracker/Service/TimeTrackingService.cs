@@ -20,6 +20,7 @@ public class TimeTrackingService
     private TimeSpan _accumulatedTime;
     private DateTime _trackingStartedAtUtc;
     private bool _isTracking;
+    private bool _isPaused;
 
     // Upwork mode tracking
     private bool _isUpworkMode;
@@ -27,6 +28,7 @@ public class TimeTrackingService
     private TimeSpan _currentWeeklyTotal;
 
     public bool IsTracking => _isTracking;
+    public bool IsPaused => _isPaused;
     public string? CurrentIssueKey => _currentIssue?.Key;
     public TimeSpan AccumulatedTime => _isUpworkMode
         ? (_currentWeeklyTotal - _baseWeeklyTotal)
@@ -267,6 +269,7 @@ public class TimeTrackingService
 
         _currentIssue = issue;
         _trackingStartedAtUtc = DateTime.UtcNow;
+        _isPaused = false;
 
         if (_isUpworkMode)
         {
@@ -398,6 +401,93 @@ public class TimeTrackingService
 
         // Reset state
         _isTracking = false;
+        _isPaused = false;
+        _currentIssue = null;
+        _accumulatedTime = TimeSpan.Zero;
+
+        if (_isUpworkMode)
+        {
+            // Reset base to current for next session
+            _baseWeeklyTotal = _currentWeeklyTotal;
+        }
+    }
+
+    /// <summary>
+    /// Pause tracking. Accumulates current elapsed time and stops the timer.
+    /// Does not log time to integrations.
+    /// </summary>
+    public void Pause()
+    {
+        if (!_isTracking || _isPaused)
+        {
+            System.Diagnostics.Debug.WriteLine("Cannot pause: not tracking or already paused");
+            return;
+        }
+
+        // Accumulate the elapsed time before pausing
+        _accumulatedTime += GetElapsedSinceStart();
+        _isPaused = true;
+
+        // Log pause event
+        if (_currentIssue != null)
+        {
+            _timeLogService.LogPause(_currentIssue.Key, _currentIssue.Summary, _currentIssue.Assignee, _currentIssue.Status);
+        }
+
+        System.Diagnostics.Debug.WriteLine($"Paused tracking. Accumulated time: {_accumulatedTime}");
+    }
+
+    /// <summary>
+    /// Resume tracking from paused state. Restarts the timer from current time.
+    /// </summary>
+    public void Resume()
+    {
+        if (!_isTracking || !_isPaused)
+        {
+            System.Diagnostics.Debug.WriteLine("Cannot resume: not tracking or not paused");
+            return;
+        }
+
+        _isPaused = false;
+        _trackingStartedAtUtc = DateTime.UtcNow;
+
+        // Log resume event
+        if (_currentIssue != null)
+        {
+            _timeLogService.LogResume(_currentIssue.Key, _currentIssue.Summary, _currentIssue.Assignee, _currentIssue.Status);
+        }
+
+        System.Diagnostics.Debug.WriteLine($"Resumed tracking from {_accumulatedTime}");
+    }
+
+    /// <summary>
+    /// Cancel tracking. Logs CANCELLED event to timelog but does not log to Jira or Deel.
+    /// Resets all tracking state.
+    /// </summary>
+    public void Cancel()
+    {
+        if (!_isTracking)
+        {
+            System.Diagnostics.Debug.WriteLine("Not tracking, nothing to cancel");
+            return;
+        }
+
+        // Calculate total time for logging purposes
+        var totalTime = _isUpworkMode
+            ? (_currentWeeklyTotal - _baseWeeklyTotal)
+            : (_accumulatedTime + GetElapsedSinceStart());
+
+        // Log cancelled event (to timelog only, not Jira/Deel)
+        if (_currentIssue != null)
+        {
+            _timeLogService.LogCancelled(_currentIssue.Key, _currentIssue.Summary, _currentIssue.Assignee, _currentIssue.Status, totalTime);
+        }
+
+        System.Diagnostics.Debug.WriteLine($"Cancelled tracking. Time discarded: {totalTime}");
+
+        // Reset state
+        _isTracking = false;
+        _isPaused = false;
         _currentIssue = null;
         _accumulatedTime = TimeSpan.Zero;
 
@@ -410,7 +500,7 @@ public class TimeTrackingService
 
     private TimeSpan GetElapsedSinceStart()
     {
-        if (!_isTracking)
+        if (!_isTracking || _isPaused)
             return TimeSpan.Zero;
 
         return DateTime.UtcNow - _trackingStartedAtUtc;

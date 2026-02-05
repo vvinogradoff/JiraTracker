@@ -9,7 +9,7 @@
         mc:Ignorable="d"
 		Icon="pack://application:,,,/icon.ico"
         Title="Settings"
-        Height="500"
+        Height="530"
         Width="320"
         WindowStyle="None"
         AllowsTransparency="True"
@@ -31,8 +31,8 @@
 												   UnknownStateText="Unknown state"/>
 		<converters:DeelConnectedToFillConverter x:Key="DeelConnectedToFillConverter"/>
 		<converters:DeelConnectedToTooltipConverter x:Key="DeelConnectedToTooltipConverter"
-													DisconnectedText="Left-click: Embedded browser | Right-click: Standalone"
-													ConnectedText="Left-click: Embedded | Right-click: Standalone"/>
+													DisconnectedText="Click to open Deel browser"
+													ConnectedText="Click to open Deel browser"/>
 		<converters:JiraConnectedToFillConverter x:Key="JiraConnectedToFillConverter"/>
 		<converters:JiraConnectedToTooltipConverter x:Key="JiraConnectedToTooltipConverter"
 													DisconnectedText="Click to connect to Jira"
@@ -322,12 +322,44 @@
 								   Text="Topmost Interval, sec:"
 								   VerticalAlignment="Center"
 								   Style="{StaticResource StyleSettingsLabel}"/>
-						<TextBox Grid.Row="0" Grid.Column="2" 
+						<TextBox Grid.Row="0" Grid.Column="2"
 								 Text="{Binding TopmostEnforcementIntervalSeconds, UpdateSourceTrigger=PropertyChanged}"
 								 HorizontalContentAlignment="Center"
 								 Style="{StaticResource StyleSettingsInput}"/>
 						<TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="4"
 								   Text="How often to enforce window stays on top (1-60 seconds)"
+								   Style="{StaticResource StyleSettingsHint}"/>
+					</Grid>
+
+					<!-- Pause on Inactivity -->
+					<Grid Margin="0,12,0,0">
+						<Grid.ColumnDefinitions>
+							<ColumnDefinition Width="*"/>
+							<ColumnDefinition Width="*"/>
+							<ColumnDefinition Width="*"/>
+							<ColumnDefinition Width="*"/>
+						</Grid.ColumnDefinitions>
+						<Grid.RowDefinitions>
+							<RowDefinition Height="*"/>
+							<RowDefinition Height="*"/>
+						</Grid.RowDefinitions>
+						<TextBlock Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2"
+								   Text="Pause on inactivity after:"
+								   VerticalAlignment="Center"
+								   Style="{StaticResource StyleSettingsLabel}"
+								   ToolTip="Number of minutes of mouse/keyboard inactivity before auto-pausing time tracking. Set to 0 to disable."/>
+						<TextBox Grid.Row="0" Grid.Column="2"
+								 Text="{Binding PauseOnInactivityMinutes, UpdateSourceTrigger=PropertyChanged}"
+								 HorizontalContentAlignment="Center"
+								 Style="{StaticResource StyleSettingsInput}"
+								 ToolTip="Minutes of inactivity (0 = disabled)"/>
+						<TextBlock Grid.Row="0" Grid.Column="3"
+								   Text="min"
+								   VerticalAlignment="Center"
+								   Margin="4,0,0,0"
+								   Style="{StaticResource StyleSettingsLabel}"/>
+						<TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="4"
+								   Text="Auto-pause tracking after N minutes of inactivity (0 to disable)"
 								   Style="{StaticResource StyleSettingsHint}"/>
 					</Grid>
 

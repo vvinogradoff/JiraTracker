@@ -19,9 +19,11 @@ public class WorklogInputViewModel : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
     public event EventHandler? SubmitRequested;
     public event EventHandler? CancelRequested;
+    public event EventHandler? DiscardRequested;
 
     public ICommand SubmitCommand { get; }
     public ICommand CancelCommand { get; }
+    public ICommand DiscardCommand { get; }
 
     public string WorkDescription
     {
@@ -60,6 +62,7 @@ public class WorklogInputViewModel : INotifyPropertyChanged
     {
         SubmitCommand = new RelayCommand(_ => Submit());
         CancelCommand = new RelayCommand(_ => Cancel());
+        DiscardCommand = new RelayCommand(_ => Discard());
     }
 
     private void Submit()
@@ -159,6 +162,11 @@ public class WorklogInputViewModel : INotifyPropertyChanged
     private void Cancel()
     {
         CancelRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void Discard()
+    {
+        DiscardRequested?.Invoke(this, EventArgs.Empty);
     }
 
     protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)

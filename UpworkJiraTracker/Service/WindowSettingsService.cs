@@ -21,6 +21,7 @@ public class WindowSettingsService
             result.WindowHeight = settings.MainWindowHeight > 0 ? settings.MainWindowHeight : 48;
             result.CustomBackgroundColor = settings.CustomBackgroundColor;
             result.LogDirectory = string.IsNullOrEmpty(settings.LogDirectory) ? "." : settings.LogDirectory;
+            result.PauseOnInactivityMinutes = settings.PauseOnInactivityMinutes;
 
             if (!string.IsNullOrEmpty(settings.TimezonesJson))
             {
@@ -71,6 +72,7 @@ public class WindowSettingsService
             settings.MainWindowHeight = windowSettings.WindowHeight;
             settings.CustomBackgroundColor = windowSettings.CustomBackgroundColor ?? string.Empty;
             settings.LogDirectory = windowSettings.LogDirectory ?? ".";
+            settings.PauseOnInactivityMinutes = windowSettings.PauseOnInactivityMinutes;
 
             if (windowSettings.Timezones.Count > 0)
             {

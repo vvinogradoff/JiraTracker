@@ -136,6 +136,24 @@ public class TimeLogService
         LogToTextFile($"[{timestamp:yyyy-MM-dd HH:mm:ss}] STOP - Issue: {issueKey}, Summary: {summary ?? "N/A"}, Assignee: {assignee ?? "N/A"}, Status: {status ?? "N/A"}");
     }
 
+    public void LogPause(string issueKey, string? summary, string? assignee, string? status)
+    {
+        var timestamp = DateTime.Now;
+        LogToTextFile($"[{timestamp:yyyy-MM-dd HH:mm:ss}] PAUSE - Issue: {issueKey}, Summary: {summary ?? "N/A"}, Assignee: {assignee ?? "N/A"}, Status: {status ?? "N/A"}");
+    }
+
+    public void LogResume(string issueKey, string? summary, string? assignee, string? status)
+    {
+        var timestamp = DateTime.Now;
+        LogToTextFile($"[{timestamp:yyyy-MM-dd HH:mm:ss}] RESUME - Issue: {issueKey}, Summary: {summary ?? "N/A"}, Assignee: {assignee ?? "N/A"}, Status: {status ?? "N/A"}");
+    }
+
+    public void LogCancelled(string issueKey, string? summary, string? assignee, string? status, TimeSpan discardedTime)
+    {
+        var timestamp = DateTime.Now;
+        LogToTextFile($"[{timestamp:yyyy-MM-dd HH:mm:ss}] CANCELLED - Issue: {issueKey}, Summary: {summary ?? "N/A"}, Assignee: {assignee ?? "N/A"}, Status: {status ?? "N/A"}, Discarded: {FormatTimeSpan(discardedTime)}");
+    }
+
     private void LogToTextFile(string message)
     {
         if (string.IsNullOrWhiteSpace(_logDirectory) || _logDirectory == ".")

@@ -34,4 +34,31 @@ public static class NativeMethods
 
     public const int GWL_EXSTYLE = -20;
     public const int WS_EX_TOPMOST = 0x00000008;
+
+    // User inactivity detection
+    [StructLayout(LayoutKind.Sequential)]
+    public struct LASTINPUTINFO
+    {
+        public uint cbSize;
+        public uint dwTime;
+    }
+
+    [DllImport("user32.dll")]
+    public static extern bool GetLastInputInfo(ref LASTINPUTINFO plii);
+
+    /// <summary>
+    /// Gets the time in milliseconds since the last user input (mouse or keyboard).
+    /// </summary>
+    public static uint GetIdleTime()
+    {
+        var lastInputInfo = new LASTINPUTINFO();
+        lastInputInfo.cbSize = (uint)Marshal.SizeOf(lastInputInfo);
+
+        if (GetLastInputInfo(ref lastInputInfo))
+        {
+            return (uint)Environment.TickCount - lastInputInfo.dwTime;
+        }
+
+        return 0;
+    }
 }

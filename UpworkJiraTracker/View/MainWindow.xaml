@@ -17,7 +17,6 @@
         Topmost="True"
         ShowInTaskbar="False"
         ResizeMode="NoResize"
-        MouseDown="Window_MouseDown"
         PreviewMouseDown="Window_PreviewMouseDown"
         Deactivated="Window_Deactivated"
 		d:DataContext="{d:DesignInstance Type=vm:MainWindowViewModel, IsDesignTimeCreatable=True}">
@@ -52,7 +51,8 @@
 		<Border x:Name="MainBorder"
                 Background="{Binding BackgroundBrush}"
                 CornerRadius="4"
-                Padding="8,4">
+                Padding="8,4"
+                Cursor="Hand">
 			<Grid>
 				<Grid.ColumnDefinitions>
 					<ColumnDefinition Width="Auto"/>
@@ -70,6 +70,7 @@
                         Height="24"
                         Margin="0,0,8,0"
 						VerticalAlignment="Top"
+						Background="Transparent"
                         Style="{StaticResource PlayStopButtonStyle}"
                         Command="{Binding PlayPauseCommand}"
                         IsEnabled="{Binding IsUpworkReady}"

@@ -31,12 +31,14 @@ public class MainWindowViewModel : INotifyPropertyChanged
     private readonly WindowSettingsService _settingsService;
     private readonly DispatcherTimer _timeUpdateTimer;
     private readonly DispatcherTimer _upworkReadTimer;
+    private readonly DispatcherTimer _inactivityCheckTimer;
     private bool _upworkReadTimerPending = false;
     private bool _isFreshWeeklyTotal = false;
     private DateTime? _freshTotalResetTime = null;
     private DateTime? _lastTenMinuteAddTime = null;
     private UpworkState _upworkState = UpworkState.NoProcess;
     private TimeStats? _baseTimeStats = null; // Base stats from Excel (without current session)
+    private int _pauseOnInactivityMinutes = 0;
 
     private string _displayText = "Upwork Memo";
     private bool _isAutocompleteActive = false;
@@ -61,9 +63,9 @@ public class MainWindowViewModel : INotifyPropertyChanged
 
     /// <summary>
     /// Delegate to request worklog input from the View.
-    /// Returns (comment, remainingEstimateHours) or (null, null) if cancelled.
+    /// Returns (comment, remainingEstimateHours, discarded) or (null, null, false) if cancelled.
     /// </summary>
-    public Func<(string? Comment, double? RemainingEstimateHours)>? RequestWorklogInput { get; set; }
+    public Func<(string? Comment, double? RemainingEstimateHours, bool Discarded)>? RequestWorklogInput { get; set; }
 
     public ICommand PlayPauseCommand { get; }
 
@@ -110,6 +112,8 @@ public class MainWindowViewModel : INotifyPropertyChanged
             }
         }
     }
+
+    public bool IsPaused => _timeTrackingService.IsPaused;
 
     public bool IsProcessing
     {
@@ -357,6 +361,14 @@ public class MainWindowViewModel : INotifyPropertyChanged
             Interval = Constants.Timeouts.UpworkReadDelay
         };
         _upworkReadTimer.Tick += UpworkReadTimer_Tick;
+
+        // Initialize inactivity check timer (checks every 30 seconds)
+        _inactivityCheckTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(30)
+        };
+        _inactivityCheckTimer.Tick += InactivityCheckTimer_Tick;
+        _inactivityCheckTimer.Start();
 
         // Load settings
         LoadSettings();
@@ -606,6 +618,9 @@ public class MainWindowViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(DisplayText));
             UpdateJiraIssueTooltip(lastMemo);
         }
+
+        // Load pause on inactivity setting
+        _pauseOnInactivityMinutes = settings.PauseOnInactivityMinutes;
     }
 
     private static void SaveLastMemo(string memo)
@@ -631,6 +646,13 @@ public class MainWindowViewModel : INotifyPropertyChanged
     {
         var bgColor = CustomBackgroundColor ?? ThemeHelper.GetTaskbarColor();
         var fgColor = ThemeHelper.GetForegroundColor();
+
+        // Use nearly-transparent (alpha=1) instead of fully transparent (alpha=0)
+        // to enable hit-testing while still appearing transparent
+        if (bgColor.A == 0)
+        {
+            bgColor = WpfColor.FromArgb(1, bgColor.R, bgColor.G, bgColor.B);
+        }
 
         BackgroundBrush = new WpfSolidColorBrush(bgColor);
         ForegroundBrush = new WpfSolidColorBrush(fgColor);
@@ -705,6 +727,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
     {
         // Icons show current STATE (not action to take):
         // - Processing: show grey Play icon (triangle) - inactive
+        // - Paused: show stroke-only Pause icon (two vertical bars) - same colors as stop
         // - Playing: show green filled Play icon (triangle)
         //   - With fresh weekly total in Upwork mode: add lightgreen outline
         // - Stopped: show stroke-only Stop icon (square outline)
@@ -715,6 +738,14 @@ public class MainWindowViewModel : INotifyPropertyChanged
             IconFillBrush = new WpfSolidColorBrush(WpfColors.Gray);
             IconStrokeBrush = new WpfSolidColorBrush(WpfColors.Transparent);
             IconStrokeThickness = 0;
+        }
+        else if (IsPaused)
+        {
+            // Show pause icon with stroke (same styling as stop)
+            PlayPauseIconData = Constants.Icons.PauseIcon;
+            IconFillBrush = new WpfSolidColorBrush(WpfColors.Transparent);
+            IconStrokeBrush = ForegroundBrush;
+            IconStrokeThickness = 2;
         }
         else if (IsPlaying)
         {
@@ -745,6 +776,16 @@ public class MainWindowViewModel : INotifyPropertyChanged
     private async Task ExecutePlayPauseAsync()
     {
         if (IsProcessing) return;
+
+        // Handle resume from paused state
+        if (IsPaused)
+        {
+            _timeTrackingService.Resume();
+            OnPropertyChanged(nameof(IsPaused));
+            UpdatePlayPauseIcon();
+            System.Diagnostics.Debug.WriteLine("Resumed tracking from paused state");
+            return;
+        }
 
         var newState = !IsPlaying;
 
@@ -794,12 +835,24 @@ public class MainWindowViewModel : INotifyPropertyChanged
             // Request worklog input from UI (runs on UI thread before background work)
             string? worklogComment = null;
             double? remainingEstimate = null;
+            bool shouldDiscard = false;
 
             if (RequestWorklogInput != null)
             {
-                var (comment, estimate) = RequestWorklogInput();
+                var (comment, estimate, discarded) = RequestWorklogInput();
                 worklogComment = comment;
                 remainingEstimate = estimate;
+                shouldDiscard = discarded;
+            }
+
+            // Handle discard case - cancel tracking without logging to Jira/Deel
+            if (shouldDiscard)
+            {
+                _timeTrackingService.Cancel();
+                IsProcessing = false;
+                UpdateTimerDisplay();
+                System.Diagnostics.Debug.WriteLine("Discarded tracking - time not logged to Jira/Deel");
+                return;
             }
 
             // Run Upwork stop in background
@@ -926,12 +979,25 @@ public class MainWindowViewModel : INotifyPropertyChanged
         // Request worklog input if we're about to log time for previous issue
         string? worklogComment = null;
         double? remainingEstimate = null;
+        bool shouldDiscard = false;
 
         if (shouldLogPrevious && RequestWorklogInput != null)
         {
-            var (comment, estimate) = RequestWorklogInput();
+            var (comment, estimate, discarded) = RequestWorklogInput();
             worklogComment = comment;
             remainingEstimate = estimate;
+            shouldDiscard = discarded;
+        }
+
+        // Handle discard case - cancel tracking without logging to Jira/Deel
+        if (shouldDiscard)
+        {
+            _timeTrackingService.Cancel();
+            // Start tracking new issue immediately
+            _timeTrackingService.Start(issue);
+            UpdateTimerDisplay();
+            System.Diagnostics.Debug.WriteLine($"Discarded previous tracking, started new issue {issue.Key}");
+            return Task.CompletedTask;
         }
 
         // Run Upwork automation first
@@ -1055,6 +1121,46 @@ public class MainWindowViewModel : INotifyPropertyChanged
                 System.Diagnostics.Debug.WriteLine($"Weekly total read failed: {ex.Message}");
             }
         });
+    }
+
+    private void InactivityCheckTimer_Tick(object? sender, System.EventArgs e)
+    {
+        // Skip if auto-pause is disabled or not tracking or already paused
+        if (_pauseOnInactivityMinutes <= 0 || !IsPlaying || IsPaused)
+            return;
+
+        // Get idle time in milliseconds
+        var idleTimeMs = NativeMethods.GetIdleTime();
+        var idleMinutes = idleTimeMs / 60000.0;
+
+        System.Diagnostics.Debug.WriteLine($"Inactivity check: {idleMinutes:F1} minutes idle (threshold: {_pauseOnInactivityMinutes} min)");
+
+        // Check if idle time exceeds threshold
+        if (idleMinutes >= _pauseOnInactivityMinutes)
+        {
+            // Auto-pause tracking
+            _timeTrackingService.Pause();
+            OnPropertyChanged(nameof(IsPaused));
+            UpdatePlayPauseIcon();
+
+            // Show toast notification
+            NotificationService.ShowSuccess(
+                "Time tracking paused",
+                $"Paused after {_pauseOnInactivityMinutes} minutes of inactivity",
+                5000);
+
+            System.Diagnostics.Debug.WriteLine($"Auto-paused tracking after {idleMinutes:F1} minutes of inactivity");
+        }
+    }
+
+    /// <summary>
+    /// Reloads the pause on inactivity setting from user settings.
+    /// Called when settings are changed.
+    /// </summary>
+    public void ReloadPauseOnInactivitySetting()
+    {
+        _pauseOnInactivityMinutes = Properties.Settings.Default.PauseOnInactivityMinutes;
+        System.Diagnostics.Debug.WriteLine($"Pause on inactivity setting reloaded: {_pauseOnInactivityMinutes} minutes");
     }
 
     private async Task ReadAndUpdateWeeklyTotalAsync()
@@ -1202,6 +1308,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
     {
         _timeUpdateTimer.Stop();
         _upworkReadTimer.Stop();
+        _inactivityCheckTimer.Stop();
     }
 
     public void Dispose()

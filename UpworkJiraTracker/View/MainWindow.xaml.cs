@@ -127,11 +127,6 @@ public partial class MainWindow : Window
 
     #region Drag Handlers
 
-    private void Window_MouseDown(object sender, MouseButtonEventArgs e)
-    {
-        // Fallback handler
-    }
-
     private void Window_PreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
         // Check if the click is within the autocomplete control or its popup
@@ -498,8 +493,8 @@ public partial class MainWindow : Window
     /// <summary>
     /// Shows the worklog input window and returns the user's input.
     /// </summary>
-    /// <returns>Tuple of (comment, remainingEstimateHours) or (null, null) if cancelled</returns>
-    public (string? Comment, double? RemainingEstimateHours) ShowWorklogInputWindow()
+    /// <returns>Tuple of (comment, remainingEstimateHours, discarded) or (null, null, false) if cancelled</returns>
+    public (string? Comment, double? RemainingEstimateHours, bool Discarded) ShowWorklogInputWindow()
     {
         var worklogWindow = new WorklogInputWindow
         {
@@ -511,16 +506,21 @@ public partial class MainWindow : Window
 
         worklogWindow.ShowDialog();
 
+        if (worklogWindow.Discarded)
+        {
+            return (null, null, true);
+        }
+
         if (worklogWindow.Submitted)
         {
             var comment = string.IsNullOrWhiteSpace(worklogWindow.WorkDescription)
                 ? null
                 : worklogWindow.WorkDescription;
 
-            return (comment, worklogWindow.RemainingEstimateHours);
+            return (comment, worklogWindow.RemainingEstimateHours, false);
         }
 
-        return (null, null);
+        return (null, null, false);
     }
 
     #endregion

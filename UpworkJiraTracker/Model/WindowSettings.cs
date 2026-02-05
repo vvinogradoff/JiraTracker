@@ -11,5 +11,6 @@ namespace UpworkJiraTracker.Model
 		public string? CustomBackgroundColor { get; set; }
 		public List<TimezoneEntry> Timezones { get; set; } = new();
 		public string LogDirectory { get; set; } = ".";
+		public int PauseOnInactivityMinutes { get; set; } = 0;
 	}
 }

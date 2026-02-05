@@ -36,6 +36,7 @@
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="80"/>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
             <!-- Description field -->
@@ -63,6 +64,20 @@
                     Style="{StaticResource PrimaryButtonStyle}"
                     Padding="8,2"
                     Command="{Binding SubmitCommand}"/>
+
+            <!-- Discard button -->
+            <Button x:Name="DiscardButton"
+                    Grid.Column="3"
+                    Content="✕"
+                    Width="26"
+                    Height="22"
+                    FontSize="14"
+                    FontWeight="Bold"
+                    Foreground="#CC3333"
+                    Style="{StaticResource SecondaryButtonStyle}"
+                    Margin="4,0,0,0"
+                    ToolTip="Discard tracked time without logging"
+                    Command="{Binding DiscardCommand}"/>
         </Grid>
     </Border>
 </Window>

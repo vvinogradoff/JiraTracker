@@ -14,6 +14,11 @@ public partial class WorklogInputWindow : Window
     public bool Submitted { get; private set; }
 
     /// <summary>
+    /// Result indicating whether user discarded the tracked time.
+    /// </summary>
+    public bool Discarded { get; private set; }
+
+    /// <summary>
     /// Work description entered by user (may be empty).
     /// </summary>
     public string WorkDescription { get; private set; } = string.Empty;
@@ -32,6 +37,7 @@ public partial class WorklogInputWindow : Window
 
         _viewModel.SubmitRequested += OnSubmitRequested;
         _viewModel.CancelRequested += OnCancelRequested;
+        _viewModel.DiscardRequested += OnDiscardRequested;
     }
 
     /// <summary>
@@ -100,6 +106,16 @@ public partial class WorklogInputWindow : Window
     private void OnCancelRequested(object? sender, EventArgs e)
     {
         Submitted = false;
+        Discarded = false;
+        WorkDescription = string.Empty;
+        RemainingEstimateHours = null;
+        Close();
+    }
+
+    private void OnDiscardRequested(object? sender, EventArgs e)
+    {
+        Submitted = false;
+        Discarded = true;
         WorkDescription = string.Empty;
         RemainingEstimateHours = null;
         Close();
